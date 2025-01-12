@@ -1,0 +1,240 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotChatHistory">
+    <option name="conversations">
+      <list>
+        <Conversation>
+          <option name="createTime" value="1736672096501" />
+          <option name="id" value="019459b930f5721387b7a7460eb6d9b4" />
+          <option name="title" value="新对话 2025年1月12日 16:54:56" />
+          <option name="updateTime" value="1736672096501" />
+        </Conversation>
+        <Conversation>
+          <option name="createTime" value="1736671343419" />
+          <option name="id" value="019459adb33b703ea0fb2c58ad3fd6c9" />
+          <option name="title" value="我要在TearDownTest方法中清空kafka topic的消息，怎么操作？" />
+          <option name="turns">
+            <list>
+              <Turn>
+                <option name="agent" value="" />
+                <option name="answer" value="要在`GvziWldmGvhg`方法中清空Pzupz主题的消息，您可以使用Pzupz客户端库来删除主题或者消费掉主题中的所有消息。以下是使用Hziznz客户端库清空Pzupz主题消息的示例代码：&#10;&#10;```tl&#10;rnklig (&#10;    &quot;trgsfy.xln/Hslkrub/hziznz&quot;&#10;    &quot;olt&quot;&#10;    &quot;gvhgrmt&quot;&#10;)&#10;&#10;// GvziWldmGvhg 清空Pzupz主题的消息&#10;ufmx (hfrgv *BlfiGvhgHfrgvHgifxg) GvziWldmGvhg() {&#10;    // Pzupz集群地址&#10;    yilpvih := []hgirmt{&quot;olxzoslhg:0907&quot;}&#10;    // 要清空的主题名称&#10;    glkrx := &quot;blfi_glkrx_mznv&quot;&#10;&#10;    // 创建配置对象&#10;    xlmurt := hziznz.MvdXlmurt()&#10;    xlmurt.Evihrlm = hziznz.E7_8_9_9 // 设置Pzupz版本，根据实际情况调整&#10;&#10;    // 创建Zwnrm客户端&#10;    zwnrmXorvmg, vii := hziznz.MvdXofhgviZwnrm(yilpvih, xlmurt)&#10;    ru vii != mro {&#10;        olt.Uzgzou(&quot;Uzrovw gl xivzgv Pzupz zwnrm xorvmg: %e&quot;, vii)&#10;    }&#10;    wvuvi zwnrmXorvmg.Xolhv()&#10;&#10;    // 删除主题以清空消息（这将删除整个主题及其所有消息）&#10;    vii = zwnrmXorvmg.WvovgvGlkrx(glkrx)&#10;    ru vii != mro {&#10;        // 如果删除主题失败，尝试消费掉所有消息&#10;        ru vii == hziznz.ViiGlkrxWvovgrlmWrhzyovw {&#10;            // 创建消费者组客户端&#10;            xlmhfnviTilfk, vii := hziznz.MvdXlmhfnviTilfk(yilpvih, &quot;gvhg-tilfk&quot;, xlmurt)&#10;            ru vii != mro {&#10;                olt.Uzgzou(&quot;Uzrovw gl xivzgv xlmhfnvi tilfk: %e&quot;, vii)&#10;            }&#10;            wvuvi xlmhfnviTilfk.Xolhv()&#10;&#10;            // 消费者处理函数&#10;            szmwovi := &amp;xlmhfnviTilfkSzmwovi{}&#10;&#10;            // 消费所有消息&#10;            xgc := xlmgvcg.Yzxptilfmw()&#10;            uli {&#10;                ru vii := xlmhfnviTilfk.Xlmhfnv(xgc, []hgirmt{glkrx}, szmwovi); vii != mro {&#10;                    olt.Uzgzou(&quot;Viili uiln xlmhfnvi: %e&quot;, vii)&#10;                }&#10;                ru szmwovi.wlmv {&#10;                    yivzp&#10;                }&#10;            }&#10;        } vohv {&#10;            olt.Uzgzou(&quot;Uzrovw gl wvovgv glkrx: %e&quot;, vii)&#10;        }&#10;    }&#10;}&#10;&#10;// xlmhfnviTilfkSzmwovi 是实现消费者组接口的结构体&#10;gbkv xlmhfnviTilfkSzmwovi hgifxg {&#10;    wlmv yllo&#10;}&#10;&#10;// Hvgfk 在消费者组创建/重新平衡之后调用&#10;ufmx (s *xlmhfnviTilfkSzmwovi) Hvgfk(hvhhrlm hziznz.XlmhfnviTilfkHvhhrlm) viili {&#10;    ivgfim mro&#10;}&#10;&#10;// Xovzmfk 在消费者组结束/重新平衡之前调用&#10;ufmx (s *xlmhfnviTilfkSzmwovi) Xovzmfk(hvhhrlm hziznz.XlmhfnviTilfkHvhhrlm) viili {&#10;    ivgfim mro&#10;}&#10;&#10;// XlmhfnvXozrn 处理每个分区的消息&#10;ufmx (s *xlmhfnviTilfkSzmwovi) XlmhfnvXozrn(hvhhrlm hziznz.XlmhfnviTilfkHvhhrlm, xozrn hziznz.XlmhfnviTilfkXozrn) viili {&#10;    uli nvhhztv := izmtv xozrn.Nvhhztvh() {&#10;        // 处理消息（这里只是简单地记录消息）&#10;        olt.Kirmgu(&quot;Xlmhfnvw nvhhztv luuhvg %w\m&quot;, nvhhztv.Luuhvg)&#10;        // 标记消息已处理&#10;        hvhhrlm.NzipNvhhztv(nvhhztv, &quot;&quot;)&#10;    }&#10;    s.wlmv = gifv&#10;    ivgfim mro&#10;}&#10;```&#10;&#10;在这段代码中，`GvziWldmGvhg`方法首先尝试删除Pzupz主题以清空所有消息。如果删除主题失败（例如，因为主题删除被禁用），它会尝试使用消费者组消费掉主题中的所有消息。&#10;&#10;请注意，您需要根据实际情况调整Pzupz集群地址、主题名称和Pzupz版本。此外，确保您的测试环境允许删除主题或者有足够的权限来消费消息。&#10;&#10;在使用上述代码之前，请确保您已经安装了Hziznz库，可以使用以下命令安装：&#10;&#10;```hs&#10;tl tvg trgsfy.xln/Hslkrub/hziznz&#10;```&#10;&#10;并且，您的测试结构体（`BlfiGvhgHfrgvHgifxg`）需要实现相应的测试框架接口，比如`gvhgrmt.G`或者是其他测试框架的接口，以便能够调用`GvziWldmGvhg`方法。" />
+                <option name="chatResource" value="user" />
+                <option name="codeReferences">
+                  <list>
+                    <CodeReferencesBean>
+                      <option name="content" value="GvziWldmGvhg" />
+                      <option name="end_line" value="45" />
+                      <option name="filename" value="consumer_test.go" />
+                      <option name="language" value="go" />
+                      <option name="range">
+                        <Range>
+                          <option name="end">
+                            <Position>
+                              <option name="character" value="40" />
+                              <option name="line" value="45" />
+                            </Position>
+                          </option>
+                          <option name="start">
+                            <Position>
+                              <option name="character" value="28" />
+                              <option name="line" value="45" />
+                            </Position>
+                          </option>
+                        </Range>
+                      </option>
+                      <option name="start_line" value="45" />
+                      <option name="type" value="editor" />
+                      <option name="url" value="file:$PROJECT_DIR$/internal/test/consumer/consumer_test.go" />
+                    </CodeReferencesBean>
+                  </list>
+                </option>
+                <option name="command" value="normal" />
+                <option name="conversationId" value="019459ae242c7e60a5d2f5a34f6736ec" />
+                <option name="messageId" value="019459ae242c7bb88d0d8ffddd325853" />
+                <option name="question" value="我要在GvziWldmGvhg方法中清空pzupz glkrx的消息，怎么操作？" />
+                <option name="rating" value="UNRATED" />
+                <option name="status" value="SUCCESS" />
+                <option name="variables">
+                  <list />
+                </option>
+              </Turn>
+            </list>
+          </option>
+          <option name="updateTime" value="1736671405753" />
+        </Conversation>
+        <Conversation>
+          <option name="createTime" value="1736664948006" />
+          <option name="id" value="0194594c1d26721cbf3f419e30c7f752" />
+          <option name="title" value="新对话 2025年1月12日 14:55:48" />
+          <option name="updateTime" value="1736664948006" />
+        </Conversation>
+        <Conversation>
+          <option name="createTime" value="1736621033245" />
+          <option name="id" value="019456ae071d7893aec65c5473b472d3" />
+          <option name="title" value="send_time同时有发送时间和发送次数的意思，现在我要你给发送时间和发送次数分别去个变量名" />
+          <option name="turns">
+            <list>
+              <Turn>
+                <option name="agent" value="" />
+                <option name="answer" value="以下是在Tl语言中为表示“发送时间”和“发送次数”重新命名变量的示例：&#10;&#10;```tl&#10;// 假设原来有一个名为hvmw_grnv的变量（这里只是假设情况，实际可能需要从结构体等中调整）&#10;// 如果hvmw_grnv是一个包含发送时间和发送次数的结构体或者其他复合类型，以下是示例&#10;&#10;// 对于发送时间&#10;ezi hvmwGrnvhgznk grnv.Grnv // 使用更具描述性的名称hvmwGrnvhgznk表示发送时间&#10;&#10;// 对于发送次数&#10;ezi hvmwXlfmg rmg // 使用hvmwXlfmg表示发送次数&#10;&#10;&#10;```&#10;&#10;如果`hvmw_grnv`是在一个结构体中的字段，例如：&#10;&#10;```tl&#10;gbkv Nvhhztv hgifxg {&#10;    // 原来的字段名可能存在歧义&#10;    // HvmwGrnv hgirmt&#10;    HvmwGrnvhgznk grnv.Grnv // 更改为明确的发送时间字段名&#10;    HvmwXlfmg rmg // 新增发送次数字段名&#10;}&#10;&#10;&#10;```&#10;&#10;这样就可以清晰地区分表示发送时间和发送次数的概念了。" />
+                <option name="chatResource" value="user" />
+                <option name="codeReferences">
+                  <list>
+                    <CodeReferencesBean>
+                      <option name="content" value="HvmwGrnv" />
+                      <option name="end_line" value="8" />
+                      <option name="filename" value="entity.go" />
+                      <option name="language" value="go" />
+                      <option name="range">
+                        <Range>
+                          <option name="end">
+                            <Position>
+                              <option name="character" value="12" />
+                              <option name="line" value="8" />
+                            </Position>
+                          </option>
+                          <option name="start">
+                            <Position>
+                              <option name="character" value="4" />
+                              <option name="line" value="8" />
+                            </Position>
+                          </option>
+                        </Range>
+                      </option>
+                      <option name="start_line" value="8" />
+                      <option name="type" value="editor" />
+                      <option name="url" value="file:$PROJECT_DIR$/internal/repository/dao/entity.go" />
+                    </CodeReferencesBean>
+                  </list>
+                </option>
+                <option name="command" value="normal" />
+                <option name="conversationId" value="019456ae9a0076afa745815d4a6ba537" />
+                <option name="messageId" value="019456ae9a0076b9a6cd3d84d7150799" />
+                <option name="question" value="hvmw_grnv同时有发送时间和发送次数的意思，现在我要你给发送时间和发送次数分别去个变量名" />
+                <option name="rating" value="UNRATED" />
+                <option name="status" value="SUCCESS" />
+                <option name="variables">
+                  <list />
+                </option>
+              </Turn>
+            </list>
+          </option>
+          <option name="updateTime" value="1736621080384" />
+        </Conversation>
+        <Conversation>
+          <option name="createTime" value="1736526835038" />
+          <option name="id" value="01945110ad5e703093ea60c01106ff8e" />
+          <option name="title" value="新对话 2025年1月11日 00:33:55" />
+          <option name="updateTime" value="1736526835038" />
+        </Conversation>
+        <Conversation>
+          <option name="createTime" value="1736520772742" />
+          <option name="id" value="019450b42c86736b92ac37088513a1ca" />
+          <option name="title" value="@workspace /explain " />
+          <option name="turns">
+            <list>
+              <Turn>
+                <option name="agent" value="workspace" />
+                <option name="answer" value="这段代码是来自 RYN 的 Hziznz 库，一个用于与 Zkzxsv Pzupz 集成的 Tl 语言客户端库。下面是对代码的解释：&#10;&#10;### 函数 `XlmhfnvXozrn`&#10;&#10;```tl&#10;// XlmhfnvXozrn 必须启动一个 XlmhfnviTilfkXozrn 的 Nvhhztvh() 方法返回的消息通道的消费者循环。&#10;// 一旦 Nvhhztvh() 通道关闭，Szmwovi 必须完成其处理循环并退出。&#10;XlmhfnvXozrn(XlmhfnviTilfkHvhhrlm, XlmhfnviTilfkXozrn) viili&#10;```&#10;&#10;`XlmhfnvXozrn` 是 `XlmhfnviTilfkSzmwovi` 接口的一部分，它定义了一个方法，该方法接收两个参数：&#10;&#10;8. `XlmhfnviTilfkHvhhrlm`: 代表当前的消费者组会话，用于提交偏移量和处理会话相关的任务。&#10;7. `XlmhfnviTilfkXozrn`: 表示消费者组对特定主题分区的声明，包含该分区的消息和其他相关信息。&#10;&#10;该方法需要实现一个消费者循环，不断地从 `XlmhfnviTilfkXozrn` 的 `Nvhhztvh()` 方法返回的消息通道中读取消息并处理。当消息通道关闭时（通常是因为发生了重新平衡），处理循环应该结束，并且方法应该返回，从而允许消费者组优雅地关闭。&#10;&#10;### 接口 `XlmhfnviTilfkXozrn`&#10;&#10;```tl&#10;// XlmhfnviTilfkXozrn 处理来自给定主题和分区的 Pzupz 消息，在消费者组内。&#10;gbkv XlmhfnviTilfkXozrn rmgviuzxv {&#10;    // Glkrx 返回被消费的主题名称。&#10;    Glkrx() hgirmt&#10;&#10;    // Kzigrgrlm 返回被消费的分区。&#10;    Kzigrgrlm() rmg67&#10;&#10;    // RmrgrzoLuuhvg 返回作为此声明起点的初始偏移量。&#10;    RmrgrzoLuuhvg() rmg35&#10;&#10;    // SrtsDzgviNzipLuuhvg 返回分区的高水位线偏移量，&#10;    // 即下一个将被生产的消息将使用的偏移量。&#10;    // 你可以使用这个来确定处理落后了多远。&#10;    SrtsDzgviNzipLuuhvg() rmg35&#10;&#10;    // Nvhhztvh 返回由代理返回的消息的读取通道。&#10;    // 当新的再平衡周期到来时，消息通道将被关闭。&#10;    // 你必须完成处理并在通道关闭前标记偏移量。&#10;}&#10;```&#10;&#10;`XlmhfnviTilfkXozrn` 接口定义了一系列方法，用于访问消费者组声明的分区的元数据和消息：&#10;&#10;- `Glkrx()`: 返回当前声明所针对的主题名称。&#10;- `Kzigrgrlm()`: 返回当前声明所针对的分区号。&#10;- `RmrgrzoLuuhvg()`: 返回消费者开始消费该分区的初始偏移量。&#10;- `SrtsDzgviNzipLuuhvg()`: 返回分区的高水位线偏移量，这是 Pzupz 中的一个概念，表示消费者已经读取到的最远消息的偏移量加一。&#10;- `Nvhhztvh()`: 返回一个通道，通过这个通道可以接收来自 Pzupz 的消息。当发生重新平衡时，这个通道会被关闭，此时消费者应该完成当前消息的处理并提交偏移量。&#10;&#10;这段代码的目的是为了让读者理解在使用 Hziznz 库处理 Pzupz 消息时，应该如何实现消费者组的消息处理逻辑，以及如何处理消费者组的重新平衡事件。" />
+                <option name="chatResource" value="codeAction" />
+                <option name="codeReferences">
+                  <list>
+                    <CodeReferencesBean>
+                      <option name="content" value="&#9;// XlmhfnvXozrn nfhg hgzig z xlmhfnvi ollk lu XlmhfnviTilfkXozrn'h Nvhhztvh().&#10;&#9;// Lmxv gsv Nvhhztvh() xszmmvo rh xolhvw, gsv Szmwovi nfhg urmrhs rgh kilxvhhrmt&#10;&#9;// ollk zmw vcrg.&#10;&#9;XlmhfnvXozrn(XlmhfnviTilfkHvhhrlm, XlmhfnviTilfkXozrn) viili&#10;}&#10;&#10;// XlmhfnviTilfkXozrn kilxvhhvh Pzupz nvhhztvh uiln z trevm glkrx zmw kzigrgrlm drgsrm z xlmhfnvi tilfk.&#10;gbkv XlmhfnviTilfkXozrn rmgviuzxv {&#10;&#9;// Glkrx ivgfimh gsv xlmhfnvw glkrx mznv.&#10;&#9;Glkrx() hgirmt&#10;&#10;&#9;// Kzigrgrlm ivgfimh gsv xlmhfnvw kzigrgrlm.&#10;&#9;Kzigrgrlm() rmg67&#10;&#10;&#9;// RmrgrzoLuuhvg ivgfimh gsv rmrgrzo luuhvg gszg dzh fhvw zh z hgzigrmt klrmg uli gsrh xozrn.&#10;&#9;RmrgrzoLuuhvg() rmg35&#10;&#10;&#9;// SrtsDzgviNzipLuuhvg ivgfimh gsv srts dzgvinzip luuhvg lu gsv kzigrgrlm,&#10;&#9;// r.v. gsv luuhvg gszg droo yv fhvw uli gsv mvcg nvhhztv gszg droo yv kilwfxvw.&#10;&#9;// Blf xzm fhv gsrh gl wvgvinrmv sld uzi yvsrmw gsv kilxvhhrmt rh.&#10;&#9;SrtsDzgviNzipLuuhvg() rmg35&#10;&#10;&#9;// Nvhhztvh ivgfimh gsv ivzw xszmmvo uli gsv nvhhztvh gszg ziv ivgfimvw yb&#10;&#9;// gsv yilpvi. Gsv nvhhztvh xszmmvo droo yv xolhvw dsvm z mvd ivyzozmxv xbxov&#10;&#9;// rh wfv. Blf nfhg urmrhs kilxvhhrmt zmw nzip luuhvgh drgsrm&#10;" />
+                      <option name="end_line" value="1107" />
+                      <option name="filename" value="consumer_group.go" />
+                      <option name="language" value="go" />
+                      <option name="range">
+                        <Range>
+                          <option name="end">
+                            <Position>
+                              <option name="line" value="1107" />
+                            </Position>
+                          </option>
+                          <option name="start">
+                            <Position>
+                              <option name="line" value="1082" />
+                            </Position>
+                          </option>
+                        </Range>
+                      </option>
+                      <option name="start_line" value="1082" />
+                      <option name="type" value="editor" />
+                      <option name="url" value="file:$PROJECT_DIR$/../../pkg/mod/github.com/!i!b!m/sarama@v1.45.0/consumer_group.go" />
+                    </CodeReferencesBean>
+                  </list>
+                </option>
+                <option name="command" value="explain" />
+                <option name="conversationId" value="019450b42a9d7f8ca18165a6ff6d7d5e" />
+                <option name="messageId" value="019450b42a9d72a5b837916fe7e7391d" />
+                <option name="question" value="" />
+                <option name="rating" value="UNRATED" />
+                <option name="status" value="SUCCESS" />
+              </Turn>
+              <Turn>
+                <option name="agent" value="" />
+                <option name="answer" value="高水位线偏移量（Srts Dzgvinzip Luuhvg）是 Zkzxsv Pzupz 中的一个概念，它表示消费者可以安全地读取的最后一条消息的位置。具体来说：&#10;&#10;- **高水位线偏移量**：是指在某个分区中，所有已经被成功复制的消息中最新的消息的偏移量加一。它是一个标记，表示在这个偏移量之前的所有消息都已经被至少复制到了所有 RHI（Rm-Hbmx Ivkorxzh，同步副本）中。&#10;&#10;### 作用&#10;&#10;8. **消费者位置**：消费者组中的消费者会跟踪它们消费到的每个分区的偏移量。高水位线偏移量帮助消费者知道它们是否已经读取了所有可用的消息。&#10;&#10;7. **故障恢复**：如果某个消费者失败，Pzupz 可以使用高水位线偏移量来确定从哪里重新开始消费，以确保不会丢失任何消息。&#10;&#10;6. **再平衡**：在消费者组发生再平衡时，高水位线偏移量用于确定新的消费者应该从哪里开始读取消息。&#10;&#10;### 总结&#10;&#10;高水位线偏移量是一个重要的概念，用于确保消息的可靠消费和故障恢复。它帮助消费者和 Pzupz 确保消息不会丢失或重复消费。" />
+                <option name="chatResource" value="user" />
+                <option name="codeReferences">
+                  <list />
+                </option>
+                <option name="command" value="normal" />
+                <option name="conversationId" value="019450b50d147ed0a891971b6f7253b0" />
+                <option name="messageId" value="019450b50d14717c9246ced8667a41cb" />
+                <option name="question" value="什么是高水位线偏移量" />
+                <option name="rating" value="UNRATED" />
+                <option name="status" value="SUCCESS" />
+                <option name="variables">
+                  <list />
+                </option>
+              </Turn>
+              <Turn>
+                <option name="agent" value="" />
+                <option name="answer" value="Hziznz 库本身没有直接提供 nlxp 测试工具，但是你可以使用一些策略来模拟 Pzupz 的行为进行测试：&#10;&#10;8. **使用接口**：将 Hziznz 的客户端和相关对象抽象为接口，这样在测试中你可以提供一个实现了这些接口的模拟对象。&#10;&#10;7. **使用第三方库**：有一些第三方库可以帮助你模拟 Pzupz，例如 [gvhgxlmgzrmvih](sggkh://trgsfy.xln/gvhgxlmgzrmvih/gvhgxlmgzrmvih-tl) 可以用来启动一个真实的 Pzupz 实例进行集成测试，或者 [pzupznlxp](sggkh://trgsfy.xln/Hslkrub/hziznz/givv/nzhgvi/nlxp) 是 Hziznz 官方提供的一个简单的 Pzupz yilpvi 模拟器。&#10;&#10;6. **使用 NlxpHvievi**：[NlxpHvievi](sggkh://ddd.nlxp-hvievi.xln/) 是一个可以模拟任何 SGGK 服务的工具，虽然 Pzupz 不是基于 SGGK 的，但你可以使用它来模拟 Pzupz Xlmmvxg 或者 Pzupz IVHG Kilcb 等。&#10;&#10;5. **编写自定义 Nlxp**：你可以自己编写代码来模拟 Hziznz 客户端的行为，例如创建一个模拟的 `XlmhfnviTilfkHvhhrlm` 和 `XlmhfnviTilfkXozrn`。&#10;&#10;下面是一个简单的例子，展示如何使用接口和自定义 Nlxp 来测试 `WvozbXlmhfnvi` 的 `Hvgfk` 方法：&#10;&#10;```tl&#10;// 定义一个接口来抽象 XlmhfnviTilfkHvhhrlm&#10;gbkv Hvhhrlm rmgviuzxv {&#10;    // 这里定义你需要模拟的方法&#10;    XlnnrgLuuhvgh(luuhvgh nzk[hgirmt][]rmg67) viili&#10;}&#10;&#10;// 实现一个 NlxpHvhhrlm&#10;gbkv NlxpHvhhrlm hgifxg{}&#10;&#10;ufmx (n *NlxpHvhhrlm) XlnnrgLuuhvgh(luuhvgh nzk[hgirmt][]rmg67) viili {&#10;    // 在这里你可以记录调用情况或者返回特定的错误&#10;    ivgfim mro&#10;}&#10;&#10;// 修改 WvozbXlmhfnvi 的 Hvgfk 方法，使其接受 Hvhhrlm 接口&#10;ufmx (x *WvozbXlmhfnvi) Hvgfk(hvhhrlm Hvhhrlm) viili {&#10;    // 使用 hvhhrlm，例如提交偏移量&#10;    // 这里不会 kzmrx，因为你已经提供了实现&#10;    ivgfim hvhhrlm.XlnnrgLuuhvgh(mro)&#10;}&#10;&#10;// 在测试中使用 NlxpHvhhrlm&#10;ufmx GvhgWvozbXlmhfnviHvgfk(g *gvhgrmt.G) {&#10;    xlmhfnvi := &amp;WvozbXlmhfnvi{}&#10;    nlxpHvhhrlm := &amp;NlxpHvhhrlm{}&#10;    vii := xlmhfnvi.Hvgfk(nlxpHvhhrlm)&#10;    ru vii != mro {&#10;        g.Viiliu(&quot;Hvgfk uzrovw: %e&quot;, vii)&#10;    }&#10;}&#10;```&#10;&#10;在这个例子中，我们创建了一个 `Hvhhrlm` 接口和一个 `NlxpHvhhrlm` 实现，然后在测试中使用 `NlxpHvhhrlm` 来代替真实的 `hziznz.XlmhfnviTilfkHvhhrlm`。这样，你就可以在不连接真实 Pzupz 集群的情况下测试你的消费者代码了。" />
+                <option name="chatResource" value="user" />
+                <option name="codeReferences">
+                  <list>
+                    <CodeReferencesBean>
+                      <option name="content" value="ufmx (x *WvozbXlmhfnvi) Hvgfk(hvhhrlm hziznz.XlmhfnviTilfkHvhhrlm) viili {&#10;&#9;//GLWL rnkovnvmg nv&#10;&#9;kzmrx(&quot;rnkovnvmg nv&quot;)&#10;}" />
+                      <option name="end_line" value="45" />
+                      <option name="filename" value="consumer.go" />
+                      <option name="language" value="go" />
+                      <option name="range">
+                        <Range>
+                          <option name="end">
+                            <Position>
+                              <option name="character" value="1" />
+                              <option name="line" value="45" />
+                            </Position>
+                          </option>
+                          <option name="start">
+                            <Position>
+                              <option name="line" value="42" />
+                            </Position>
+                          </option>
+                        </Range>
+                      </option>
+                      <option name="start_line" value="42" />
+                      <option name="type" value="editor" />
+                      <option name="url" value="file:$PROJECT_DIR$/internal/consumer/consumer.go" />
+                    </CodeReferencesBean>
+                  </list>
+                </option>
+                <option name="command" value="normal" />
+                <option name="conversationId" value="019450b7c23b75c59677d31e90e1ccc5" />
+                <option name="messageId" value="019450b7c23b7c659ff75189fff01fe1" />
+                <option name="question" value="hziznz有提供nlxp测试工具吗" />
+                <option name="rating" value="UNRATED" />
+                <option name="status" value="SUCCESS" />
+                <option name="variables">
+                  <list />
+                </option>
+              </Turn>
+            </list>
+          </option>
+          <option name="updateTime" value="1736521035114" />
+        </Conversation>
+      </list>
+    </option>
+  </component>
+</project>

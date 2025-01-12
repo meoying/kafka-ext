@@ -1,30 +1,66 @@
-// Copyright 2023 ecodeclub
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-// http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package consumer
 
-// 1. 将 DelayMessage 转储到数据库
-// 2. 启动一个异步任务，将快要到发送时间的消息取出来，到点转发
-// 2.1 每次取已经到时间点的 >= SendTime，而后转发。分批取
-// 2.2 每次取出 >= SendTime - 1s，在内存里面维护一个延迟队列，到点发送。
-//
-//		要小心分批取，要小心延迟队列的长度
-//	 周日晚上提交合并请求
-type DelayMessage struct {
-	Key      string
-	Biz      string
-	Content  string
-	BizTopic string
-	SendTime int64
+import (
+	"context"
+	"encoding/json"
+	"github.com/IBM/sarama"
+	msg2 "github.com/meoying/kafka-ext/internal/msg"
+	"github.com/meoying/kafka-ext/internal/service"
+	"log/slog"
+	"time"
+)
+
+// DelayConsumer 消费消息，然后转储到数据库
+type DelayConsumer struct {
+	svc    *service.ConsumerService
+	logger *slog.Logger
+}
+
+func NewDelayConsumer(svc *service.ConsumerService, logger *slog.Logger) *DelayConsumer {
+	return &DelayConsumer{svc: svc, logger: logger}
+}
+
+func (c *DelayConsumer) Setup(session sarama.ConsumerGroupSession) error {
+	c.logger.Info("启动消费者", slog.String("member_id", session.MemberID()))
+
+	return nil
+}
+
+func (c *DelayConsumer) Cleanup(session sarama.ConsumerGroupSession) error {
+	return nil
+}
+
+func (c *DelayConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	msgs := claim.Messages()
+	for msg := range msgs {
+		delayMsg, err := c.newMsg(msg)
+		if err != nil {
+			c.logger.Error("提取消费内容失败",
+				slog.String("key", string(msg.Key)),
+				slog.Any("err", err))
+			session.MarkMessage(msg, "")
+			continue
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		err = c.svc.StoreMsg(ctx, delayMsg)
+		cancel()
+
+		if err != nil {
+			c.logger.Error("转储消息失败",
+				slog.String("key", string(msg.Key)),
+				slog.Any("err", err))
+		}
+		session.MarkMessage(msg, "")
+	}
+	return nil
+}
+
+func (c *DelayConsumer) newMsg(msg *sarama.ConsumerMessage) (msg2.DelayMessage, error) {
+	var res msg2.DelayMessage
+	err := json.Unmarshal(msg.Value, &res)
+	if err != nil {
+		return msg2.DelayMessage{}, err
+	}
+	return res, nil
 }
