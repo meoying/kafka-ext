@@ -56,9 +56,7 @@ func (s *ConsumerTestSuite) TearDownTest() {
 
 func (s *ConsumerTestSuite) TestConsumer() {
 	cfg := sarama.NewConfig()
-	cfg.Version = sarama.V2_1_0_0
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
-	cfg.Consumer.Offsets.AutoCommit.Enable = false
 	consumer, err := sarama.NewConsumerGroup([]string{"localhost:9094"},
 		"test_consumer", cfg)
 	require.NoError(s.T(), err)
