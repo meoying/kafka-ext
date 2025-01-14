@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"log/slog"
 	"testing"
 	"time"
 )
@@ -22,7 +21,6 @@ import (
 type ConsumerTestSuite struct {
 	suite.Suite
 	db       *gorm.DB
-	logger   *slog.Logger
 	producer sarama.SyncProducer
 }
 
@@ -45,8 +43,6 @@ func (s *ConsumerTestSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 
 	s.producer = producer
-
-	s.logger = slog.Default()
 }
 
 func (s *ConsumerTestSuite) TearDownTest() {
@@ -65,18 +61,18 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	dbDAO := dao.NewMsgDAO(s.db)
-	repo := repository.NewMsgRepository(dbDAO, s.logger)
+	repo := repository.NewMsgRepository(dbDAO)
 	svc := service.NewConsumerService(repo)
-	delayConsumer := consumer2.NewDelayConsumer(svc, s.logger)
+	delayConsumer := consumer2.NewDelayConsumer(svc)
+
+	// 往kafka中发几条消息
+	err = s.producer.SendMessages(produceMsg())
+	require.NoError(s.T(), err)
 
 	go func() {
 		err1 := consumer.Consume(ctx, []string{"test_topic"}, delayConsumer)
 		assert.NoError(s.T(), err1)
 	}()
-
-	// 往kafka中发几条消息
-	err = s.producer.SendMessages(produceMsg())
-	require.NoError(s.T(), err)
 
 	<-ctx.Done()
 

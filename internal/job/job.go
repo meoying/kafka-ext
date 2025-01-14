@@ -8,14 +8,14 @@ import (
 
 // DelayProducerJob 延迟消息生产者
 type DelayProducerJob struct {
-	svc    *service.ProducerService
-	logger *slog.Logger
+	svc    *service.ProducerJob
+	Logger *slog.Logger
 }
 
-func NewDelayProducerJob(svc *service.ProducerService, logger *slog.Logger) *DelayProducerJob {
-	return &DelayProducerJob{svc: svc, logger: logger}
+func NewDelayProducerJob(svc *service.ProducerJob) *DelayProducerJob {
+	return &DelayProducerJob{svc: svc, Logger: slog.Default()}
 }
 
-func (d *DelayProducerJob) Run(ctx context.Context) error {
-	return d.svc.FindAndSendMsgs(ctx)
+func (d *DelayProducerJob) Run(ctx context.Context) {
+	go d.svc.Start(ctx)
 }

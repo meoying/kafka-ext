@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/IBM/sarama"
 	msg2 "github.com/meoying/kafka-ext/internal/msg"
@@ -12,36 +13,53 @@ import (
 	"time"
 )
 
-type ProducerService struct {
+type ProducerJob struct {
 	producer     sarama.SyncProducer
 	repo         repository.MessageRepository
-	batchSize    int
-	logger       *slog.Logger
+	BatchSize    int
+	Logger       *slog.Logger
 	maxSendCount int
 }
 
-func NewProducerService(producer sarama.SyncProducer, repo repository.MessageRepository, logger *slog.Logger) *ProducerService {
-	return &ProducerService{
+func NewProducerService(producer sarama.SyncProducer, repo repository.MessageRepository) *ProducerJob {
+	return &ProducerJob{
 		producer:     producer,
 		repo:         repo,
-		logger:       logger,
+		Logger:       slog.Default(),
 		maxSendCount: 3,
-		batchSize:    10,
+		BatchSize:    10,
 	}
 }
 
-func (p *ProducerService) FindAndSendMsgs(ctx context.Context) error {
+func (p *ProducerJob) Start(ctx context.Context) {
+	for {
+		count, err := p.findAndSendMsgs(ctx)
+		if err != nil {
+			p.Logger.Error("执行任务失败", slog.Any("err", err))
+		}
+		ctxErr := ctx.Err()
+		switch {
+		case errors.Is(ctxErr, context.Canceled), errors.Is(ctxErr, context.DeadlineExceeded):
+			p.Logger.Info("任务被取消，退出任务循环")
+			return
+		default:
+			p.Logger.Error("定时任务失败，将执行重试")
+		}
+		if count == 0 {
+			time.Sleep(time.Second)
+		}
+	}
+}
+
+func (p *ProducerJob) findAndSendMsgs(ctx context.Context) (int, error) {
 	// 先从数据库中取一批待发送的消息
 	// 然后将消息发送出去
 	// 最后更新数据库中的消息状态
-	offset := 0
-	msgs, err := p.findMsgs(ctx, offset, p.batchSize)
+	msgs, err := p.findMsgs(ctx, 0, p.BatchSize)
 	if err != nil {
-		p.logger.Error("查找消息失败", slog.Any("err", err))
-		return err
+		// 通过 len == 0 判断有没有消息
+		return -1, fmt.Errorf("查找消息失败 %w", err)
 	}
-	// TODO: 使用延时队列提升时间精度
-
 	var eg errgroup.Group
 	for _, msg := range msgs {
 		shadow := msg
@@ -52,19 +70,19 @@ func (p *ProducerService) FindAndSendMsgs(ctx context.Context) error {
 	}
 	err = eg.Wait()
 	if err != nil {
-		p.logger.Error("发送消息失败", slog.Any("err", err))
+		return len(msgs), fmt.Errorf("发送消息失败 %w", err)
 	}
-	return err
+	return len(msgs), nil
 }
 
-func (p *ProducerService) findMsgs(ctx context.Context, offset, limit int) ([]msg2.Message, error) {
+func (p *ProducerJob) findMsgs(ctx context.Context, offset, limit int) ([]msg2.Message, error) {
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second*3)
 	msgs, err := p.repo.FindMsgs(dbCtx, offset, limit)
 	cancel()
 	return msgs, err
 }
 
-func (p *ProducerService) sengMsg(ctx context.Context, msg msg2.Message) error {
+func (p *ProducerJob) sengMsg(ctx context.Context, msg msg2.Message) error {
 	_, _, err := p.producer.SendMessage(&sarama.ProducerMessage{
 		Topic:     msg.BizTopic,
 		Partition: msg.Partition,

@@ -9,7 +9,7 @@ services:
       MYSQL_ROOT_PASSWORD: root
     volumes:
       # 设置初始化脚本
-      - ./script/mysql/:/docker-entrypoint-initdb.d/
+      - ./mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:
       # 端口映射
       - "13316:3306"

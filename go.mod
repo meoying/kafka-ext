@@ -4,7 +4,6 @@ go 1.23.1
 
 require (
 	github.com/IBM/sarama v1.45.0
-	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/mock v0.5.0
 	golang.org/x/sync v0.10.0

@@ -19,8 +19,8 @@ type MsgRepository struct {
 	logger *slog.Logger
 }
 
-func NewMsgRepository(dao dao.MessageDAO, logger *slog.Logger) *MsgRepository {
-	return &MsgRepository{dao: dao, logger: logger}
+func NewMsgRepository(dao dao.MessageDAO) *MsgRepository {
+	return &MsgRepository{dao: dao, logger: slog.Default()}
 }
 
 func (m *MsgRepository) CreateMsg(ctx context.Context, message msg2.DelayMessage) error {

@@ -10,22 +10,19 @@ import (
 	"github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
 	"github.com/meoying/kafka-ext/internal/test/mocks"
-	"github.com/robfig/cron/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/mock/gomock"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"log/slog"
 	"testing"
 	"time"
 )
 
 type ProducerTestSuite struct {
 	suite.Suite
-	db     *gorm.DB
-	logger *slog.Logger
+	db *gorm.DB
 }
 
 func TestProducer(t *testing.T) {
@@ -36,9 +33,6 @@ func (s *ProducerTestSuite) SetupSuite() {
 	db, err := gorm.Open(mysql.Open("root:root@tcp(localhost:13316)/kafka_ext?charset=utf8mb4&collation=utf8mb4_general_ci&parseTime=True&loc=Local&timeout=1s&readTimeout=3s&writeTimeout=3s"))
 	require.NoError(s.T(), err)
 	s.db = db
-
-	logger := slog.Default()
-	s.logger = logger
 
 	err = db.AutoMigrate(&dao.DelayMsg{})
 	require.NoError(s.T(), err)
@@ -145,18 +139,15 @@ func (s *ProducerTestSuite) TestProducer() {
 			tc.before()
 
 			producer := tc.mock(ctrl)
-			cronJob := cron.New()
 			dbDAO := dao.NewMsgDAO(s.db)
-			repo := repository.NewMsgRepository(dbDAO, s.logger)
-			svc := service.NewProducerService(producer, repo, s.logger)
-			producerJob := job.NewDelayProducerJob(svc, s.logger)
-			jobAdapter := job.NewDelayProducerJobAdapter(producerJob, s.logger)
-			_, err := cronJob.AddJob("@every 3s", jobAdapter)
-			assert.NoError(s.T(), err)
+			repo := repository.NewMsgRepository(dbDAO)
+			svc := service.NewProducerService(producer, repo)
+			task := job.NewDelayProducerJob(svc)
 
-			cronJob.Start()
-			time.Sleep(time.Second * 5)
-			cronJob.Stop()
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+			defer cancel()
+			task.Run(ctx)
+			<-ctx.Done()
 
 			tc.after()
 		})
