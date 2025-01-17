@@ -5,6 +5,8 @@ import (
 	"errors"
 	"github.com/IBM/sarama"
 	"github.com/meoying/kafka-ext/internal/job"
+	dlock "github.com/meoying/kafka-ext/internal/lock"
+	glock "github.com/meoying/kafka-ext/internal/lock/gorm"
 	"github.com/meoying/kafka-ext/internal/msg"
 	"github.com/meoying/kafka-ext/internal/repository"
 	"github.com/meoying/kafka-ext/internal/repository/dao"
@@ -22,7 +24,8 @@ import (
 
 type ProducerTestSuite struct {
 	suite.Suite
-	db *gorm.DB
+	db         *gorm.DB
+	lockClient dlock.Client
 }
 
 func TestProducer(t *testing.T) {
@@ -36,10 +39,18 @@ func (s *ProducerTestSuite) SetupSuite() {
 
 	err = db.AutoMigrate(&dao.DelayMsg{})
 	require.NoError(s.T(), err)
+
+	lockClient := glock.NewClient(s.db)
+	err = lockClient.InitTable()
+	require.NoError(s.T(), err)
+	s.lockClient = lockClient
 }
 
 func (s *ProducerTestSuite) TearDownTest() {
 	err := s.db.Exec("TRUNCATE TABLE delay_msgs").Error
+	require.NoError(s.T(), err)
+
+	err = s.db.Exec("TRUNCATE TABLE distributed_locks").Error
 	require.NoError(s.T(), err)
 }
 
@@ -141,7 +152,7 @@ func (s *ProducerTestSuite) TestProducer() {
 			producer := tc.mock(ctrl)
 			dbDAO := dao.NewMsgDAO(s.db)
 			repo := repository.NewMsgRepository(dbDAO)
-			svc := service.NewProducerService(producer, repo)
+			svc := service.NewProducerService(producer, repo, s.lockClient)
 			task := job.NewDelayProducerJob(svc)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
