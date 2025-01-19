@@ -32,3 +32,7 @@ func (m *MsgDAO) FindMsgs(ctx context.Context, offset, limit int) ([]DelayMsg, e
 func (m *MsgDAO) UpdateMsg(ctx context.Context, key string, fields map[string]any) error {
 	return m.db.WithContext(ctx).Model(&DelayMsg{}).Where(DelayMsg{Key: key}).Updates(fields).Error
 }
+
+func (m *MsgDAO) InitTable() error {
+	return m.db.AutoMigrate(&DelayMsg{})
+}
