@@ -58,8 +58,5 @@ func (c *DelayConsumer) consume(msg *sarama.ConsumerMessage) error {
 func (c *DelayConsumer) newMsg(msg *sarama.ConsumerMessage) (msg2.DelayMessage, error) {
 	var res msg2.DelayMessage
 	err := json.Unmarshal(msg.Value, &res)
-	if err != nil {
-		return msg2.DelayMessage{}, err
-	}
-	return res, nil
+	return res, err
 }

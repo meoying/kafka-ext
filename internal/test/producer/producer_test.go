@@ -65,7 +65,12 @@ func (s *ProducerTestSuite) TestProducer() {
 			name: "发送成功",
 			mock: func(ctrl *gomock.Controller) sarama.SyncProducer {
 				producer := mocks.NewMockSyncProducer(ctrl)
-				producer.EXPECT().SendMessage(gomock.Any()).
+				producer.EXPECT().SendMessage(&sarama.ProducerMessage{
+					Topic:     "biz-topic",
+					Partition: 0,
+					Key:       sarama.StringEncoder("key1"),
+					Value:     sarama.StringEncoder("第一条消息"),
+				}).
 					Return(1, 1, nil)
 				return producer
 			},
@@ -152,8 +157,8 @@ func (s *ProducerTestSuite) TestProducer() {
 			producer := tc.mock(ctrl)
 			dbDAO := dao.NewMsgDAO(s.db)
 			repo := repository.NewMsgRepository(dbDAO)
-			svc := service.NewProducerService(producer, repo, s.lockClient)
-			task := job.NewDelayProducerJob(svc)
+			svc := service.NewProducerService(producer, repo)
+			task := job.NewDelayProducerJob(svc, s.lockClient)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 			defer cancel()
