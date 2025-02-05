@@ -6,7 +6,7 @@ import (
 	"github.com/ecodeclub/ekit/bean/option"
 	"github.com/ecodeclub/ekit/retry"
 	"github.com/google/uuid"
-	"github.com/meoying/kafka-ext/internal/lock/errs"
+	"github.com/meoying/kafka-ext/internal/pkg/lock/errs"
 	"gorm.io/gorm"
 	"time"
 )
@@ -51,7 +51,7 @@ func NewLock(db *gorm.DB,
 		expiration: expiration,
 		lockRetry:  strategy,
 		tableName:  defaultTableName,
-		mode:       ModeCASFirst,
+		mode:       ModeInsertFirst,
 	}
 	option.Apply(l, opts...)
 	l.value = l.valuer()

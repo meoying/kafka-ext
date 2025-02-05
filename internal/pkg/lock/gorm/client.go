@@ -2,7 +2,7 @@ package glock
 
 import (
 	"context"
-	dlock "github.com/meoying/kafka-ext/internal/lock"
+	dlock "github.com/meoying/kafka-ext/internal/pkg/lock"
 	"gorm.io/gorm"
 	"time"
 )

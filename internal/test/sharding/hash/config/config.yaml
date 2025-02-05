@@ -1,0 +1,20 @@
+datasource:
+  - db:
+    name: "kafka_ext_db_0"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext_db_0?charset=utf8mb4&parseTime=True&loc=Local"
+  - db:
+    name: "kafka_ext_db_1"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext_db_1?charset=utf8mb4&parseTime=True&loc=Local"
+
+algorithm:
+  type: "hash"
+  hash:
+    dbPattern:
+      base: 2
+      name: "kafka_ext_db_%d"
+      sharding: true
+    tablePattern:
+      base: 2
+      name: "delay_msgs_tab_%d"
+      sharding: true
+  range:

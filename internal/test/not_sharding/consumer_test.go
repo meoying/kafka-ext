@@ -1,14 +1,18 @@
-package consumer
+package not_sharding
 
 import (
 	"context"
 	"fmt"
 	"github.com/IBM/sarama"
+	"github.com/meoying/kafka-ext/config"
 	consumer2 "github.com/meoying/kafka-ext/internal/consumer"
 	"github.com/meoying/kafka-ext/internal/msg"
 	"github.com/meoying/kafka-ext/internal/repository"
 	"github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
+	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
+	"github.com/meoying/kafka-ext/internal/sharding/strategy"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -18,18 +22,63 @@ import (
 	"time"
 )
 
+const (
+	dbName    = "kafka_ext"
+	tableName = "delay_msgs"
+)
+
 type ConsumerTestSuite struct {
 	suite.Suite
 	db       *gorm.DB
 	producer sarama.SyncProducer
+
+	dbPattern    strategy.Pattern
+	tablePattern strategy.Pattern
 }
 
 func TestConsumer(t *testing.T) {
 	suite.Run(t, new(ConsumerTestSuite))
 }
 
+func initCfg(t *testing.T, c *config.Config) {
+	viper.SetConfigFile("config/config.yaml")
+	err := viper.ReadInConfig()
+	require.NoError(t, err)
+
+	err = viper.UnmarshalKey("datasource", &c.DataSource)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(c.DataSource))
+	require.Equal(t, dbName, c.DataSource[0].Name)
+
+	err = viper.UnmarshalKey("algorithm", &c.Algorithm)
+	require.NoError(t, err)
+
+	// 断言是不分库分表的配置信息
+	require.Equal(t, "hash", c.Algorithm.Type)
+	require.True(t, !c.Algorithm.Hash.DBPattern.Sharding)
+	require.True(t, !c.Algorithm.Hash.TablePattern.Sharding)
+	require.Equal(t, dbName, c.Algorithm.Hash.DBPattern.Name)
+	require.Equal(t, tableName, c.Algorithm.Hash.TablePattern.Name)
+}
+
 func (s *ConsumerTestSuite) SetupSuite() {
-	db, err := gorm.Open(mysql.Open("root:root@tcp(localhost:13316)/kafka_ext?charset=utf8mb4&collation=utf8mb4_general_ci&parseTime=True&loc=Local&timeout=1s&readTimeout=3s&writeTimeout=3s"))
+	var c config.Config
+	initCfg(s.T(), &c)
+
+	dbPattern := strategy.Pattern{
+		Base:     c.Algorithm.Hash.DBPattern.Base,
+		Name:     c.Algorithm.Hash.DBPattern.Name,
+		Sharding: c.Algorithm.Hash.DBPattern.Sharding,
+	}
+	tablePattern := strategy.Pattern{
+		Base:     c.Algorithm.Hash.TablePattern.Base,
+		Name:     c.Algorithm.Hash.TablePattern.Name,
+		Sharding: c.Algorithm.Hash.TablePattern.Sharding,
+	}
+	s.dbPattern = dbPattern
+	s.tablePattern = tablePattern
+
+	db, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
 	s.db = db
 	err = s.db.AutoMigrate(&dao.DelayMsg{})
@@ -51,23 +100,33 @@ func (s *ConsumerTestSuite) TearDownTest() {
 }
 
 func (s *ConsumerTestSuite) TestConsumer() {
+	dbs := map[string]*gorm.DB{
+		dbName: s.db,
+	}
+
+	notSharding := strategy.NewHashSharding(s.dbPattern, s.tablePattern)
+	//notSharding := strategy.NewNotSharding(dbName, tableName)
+	sharding := sharding2.NewSharding(notSharding)
+
 	cfg := sarama.NewConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	consumer, err := sarama.NewConsumerGroup([]string{"localhost:9094"},
 		"test_consumer", cfg)
 	require.NoError(s.T(), err)
 	defer consumer.Close()
-	// 5秒内消费完
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
-	dbDAO := dao.NewMsgDAO(s.db)
+
+	dbDAO := dao.NewMsgDAO(dbs)
 	repo := repository.NewMsgRepository(dbDAO)
-	svc := service.NewConsumerService(repo)
+	svc := service.NewConsumerService(repo, sharding)
 	delayConsumer := consumer2.NewDelayConsumer(svc)
 
 	// 往kafka中发几条消息
 	err = s.producer.SendMessages(produceMsg())
 	require.NoError(s.T(), err)
+
+	// 5秒内消费完
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 
 	go func() {
 		err1 := consumer.Consume(ctx, []string{"test_topic"}, delayConsumer)
