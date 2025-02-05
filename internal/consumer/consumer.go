@@ -41,6 +41,7 @@ func (c *DelayConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 	}
 	return nil
 }
+
 func (c *DelayConsumer) consume(msg *sarama.ConsumerMessage) error {
 	delayMsg, err := c.newMsg(msg)
 	if err != nil {

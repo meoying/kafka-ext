@@ -1,0 +1,49 @@
+datasource:
+  - db:
+    name: "kafka_ext_db_0"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext_db_0?charset=utf8mb4&parseTime=True&loc=Local"
+  - db:
+    name: "kafka_ext_db_1"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext_db_1?charset=utf8mb4&parseTime=True&loc=Local"
+
+# 分库分表算法
+algorithm:
+  type: "hash"
+  hash:
+    # 通过 sharding 配置，细分为只分库不分表，只分表不分库，分库分表，不分库不分表
+    # 默认按照 biz 和 bizID 分库分表
+    dbPattern:
+      base: 2
+      name: "kafka_ext_db_%d"
+      sharding: true
+    tablePattern:
+      base: 2
+      name: "delay_msgs_tab_%d"
+      sharding: true
+  range:
+    # 只支持分表
+     db: "kafka_ext"
+     table: "delay_msgs_%s"
+#     format: "20060102" # 默认格式，不要修改
+     interval: 1 # 分表间隔，单位为天
+     retention: 7 # 数据保留时间，单位为天，在 retention 时间内，分片被认为是有效的
+
+
+# 分布式锁
+lock:
+  type: "gorm"
+  gorm:
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext?charset=utf8mb4&parseTime=True&loc=Local"
+
+kafka:
+  addr: "localhost:9094"
+  groupID: "delay_consumer"
+  # 消费者的 topic
+  topic: "kafka_ext_delay_msg"
+
+
+
+     
+
+
+

@@ -4,9 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	dlock "github.com/meoying/kafka-ext/internal/lock"
-	"github.com/meoying/kafka-ext/internal/lock/errs"
+	dlock "github.com/meoying/kafka-ext/internal/pkg/lock"
+	"github.com/meoying/kafka-ext/internal/pkg/lock/errs"
 	"github.com/meoying/kafka-ext/internal/service"
+	"github.com/meoying/kafka-ext/internal/sharding"
 	"log/slog"
 	"time"
 )
@@ -17,13 +18,15 @@ type DelayProducerJob struct {
 	Logger     *slog.Logger
 	lockClient dlock.Client
 	BatchSize  int
+	dst        sharding.DST
 }
 
-func NewDelayProducerJob(svc *service.ProducerService, lockClient dlock.Client) *DelayProducerJob {
+func NewDelayProducerJob(svc *service.ProducerService, lockClient dlock.Client, dst sharding.DST) *DelayProducerJob {
 	return &DelayProducerJob{svc: svc,
 		Logger:     slog.Default(),
 		lockClient: lockClient,
 		BatchSize:  100,
+		dst:        dst,
 	}
 }
 
@@ -32,7 +35,8 @@ func (p *DelayProducerJob) Run(ctx context.Context) {
 }
 
 func (p *DelayProducerJob) do(ctx context.Context) {
-	key := "send-delay-msg-job"
+	key := fmt.Sprintf("%s.%s", p.dst.DB, p.dst.Table)
+	p.Logger = p.Logger.With(slog.String("key", key))
 	interval := time.Minute
 	for {
 		lock, err := p.lockClient.NewLock(ctx, key, interval)
@@ -45,14 +49,19 @@ func (p *DelayProducerJob) do(ctx context.Context) {
 		err = lock.Lock(lockCtx)
 		cancel()
 
-		if err != nil {
-			if errors.Is(err, errs.ErrLocked) {
-				p.Logger.Info("获取分布式锁失败，别人持有中")
-			} else {
-				p.Logger.Error("获取分布式锁失败，系统出现问题", slog.Any("err", err))
-			}
+		switch {
+		case errors.Is(err, errs.ErrLocked):
+			p.Logger.Info("获取分布式锁失败，别人持有中")
 			time.Sleep(time.Second * 10)
 			continue
+		case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+			p.Logger.Info("任务取消，退出消息发送任务")
+			return
+		case err != nil:
+			time.Sleep(time.Second * 10)
+			continue
+		default:
+			// err == nil
 		}
 
 		err = p.refreshAndSendMsgs(ctx, lock)
@@ -91,7 +100,7 @@ func (p *DelayProducerJob) refreshAndSendMsgs(ctx context.Context, lock dlock.Lo
 			return fmt.Errorf("分布式锁续约失败 %w", err)
 		}
 
-		count, err := p.svc.SendDelayMsgs(ctx, p.BatchSize)
+		count, err := p.svc.SendDelayMsgs(ctx, p.BatchSize, p.dst)
 		ctxErr := ctx.Err()
 		switch {
 		case errors.Is(ctxErr, context.Canceled), errors.Is(ctxErr, context.DeadlineExceeded):

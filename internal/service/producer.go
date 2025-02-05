@@ -7,6 +7,7 @@ import (
 	msg2 "github.com/meoying/kafka-ext/internal/msg"
 	"github.com/meoying/kafka-ext/internal/repository"
 	"github.com/meoying/kafka-ext/internal/repository/dao"
+	"github.com/meoying/kafka-ext/internal/sharding"
 	"golang.org/x/sync/errgroup"
 	"log/slog"
 	"time"
@@ -28,11 +29,11 @@ func NewProducerService(producer sarama.SyncProducer, repo repository.MessageRep
 	}
 }
 
-func (p *ProducerService) SendDelayMsgs(ctx context.Context, batchSize int) (int, error) {
+func (p *ProducerService) SendDelayMsgs(ctx context.Context, batchSize int, dst sharding.DST) (int, error) {
 	// 先从数据库中取一批待发送的消息
 	// 然后将消息发送出去
 	// 最后更新数据库中的消息状态
-	msgs, err := p.findMsgs(ctx, 0, batchSize)
+	msgs, err := p.findMsgs(ctx, 0, batchSize, dst)
 	if err != nil {
 		// 通过 len == 0 判断有没有消息
 		return -1, fmt.Errorf("查找消息失败 %w", err)
@@ -41,7 +42,7 @@ func (p *ProducerService) SendDelayMsgs(ctx context.Context, batchSize int) (int
 	for _, msg := range msgs {
 		shadow := msg
 		eg.Go(func() error {
-			err1 := p.sengMsg(ctx, shadow)
+			err1 := p.sengMsg(ctx, shadow, dst)
 			return err1
 		})
 	}
@@ -52,14 +53,14 @@ func (p *ProducerService) SendDelayMsgs(ctx context.Context, batchSize int) (int
 	return len(msgs), nil
 }
 
-func (p *ProducerService) findMsgs(ctx context.Context, offset, limit int) ([]msg2.Message, error) {
+func (p *ProducerService) findMsgs(ctx context.Context, offset, limit int, dst sharding.DST) ([]msg2.Message, error) {
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second*3)
-	msgs, err := p.repo.FindMsgs(dbCtx, offset, limit)
+	msgs, err := p.repo.FindMsgs(dbCtx, offset, limit, dst)
 	cancel()
 	return msgs, err
 }
 
-func (p *ProducerService) sengMsg(ctx context.Context, msg msg2.Message) error {
+func (p *ProducerService) sengMsg(ctx context.Context, msg msg2.Message, dst sharding.DST) error {
 	_, _, err := p.producer.SendMessage(&sarama.ProducerMessage{
 		Topic:     msg.BizTopic,
 		Partition: msg.Partition,
@@ -81,7 +82,7 @@ func (p *ProducerService) sengMsg(ctx context.Context, msg msg2.Message) error {
 	}
 
 	dbCtx, cancel := context.WithTimeout(ctx, time.Second*3)
-	err1 := p.repo.UpdateMsg(dbCtx, msg.Key, field)
+	err1 := p.repo.UpdateMsg(dbCtx, msg.Key, field, dst)
 	cancel()
 	if err1 != nil {
 		return fmt.Errorf("更新消息失败 %w, topic %s, key %s",

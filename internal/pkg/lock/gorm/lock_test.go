@@ -2,7 +2,7 @@ package glock
 
 import (
 	"context"
-	"github.com/meoying/kafka-ext/internal/lock/errs"
+	"github.com/meoying/kafka-ext/internal/pkg/lock/errs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
