@@ -172,8 +172,7 @@ func initSharding(c config.Config) (*sharding2.Sharding, error) {
 		}
 		algorithm = strategy.NewHashSharding(dbPattern, tablePattern)
 	case "range":
-		// TODO: 未实现
-		panic("未实现")
+		algorithm = strategy.NewTimeRange(c.Algorithm.Range.DB, c.Algorithm.Range.Table, c.Algorithm.Range.Retention, c.Algorithm.Range.Interval)
 	default:
 		return nil, fmt.Errorf("未知的分库分表算法类型 %s", c.Algorithm.Type)
 	}
