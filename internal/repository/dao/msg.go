@@ -2,48 +2,41 @@ package dao
 
 import (
 	"context"
-	"fmt"
-	"github.com/meoying/kafka-ext/internal/sharding"
 	"gorm.io/gorm"
 	"time"
 )
 
 type MsgDAO struct {
-	dbs map[string]*gorm.DB
+	db *gorm.DB
 }
 
-func NewMsgDAO(dbs map[string]*gorm.DB) *MsgDAO {
-	return &MsgDAO{dbs: dbs}
+func NewMsgDAO(db *gorm.DB) *MsgDAO {
+	return &MsgDAO{db: db}
 }
 
-func (m *MsgDAO) CreateMsg(ctx context.Context, message DelayMsg, dst sharding.DST) error {
-	db, ok := m.dbs[dst.DB]
-	if !ok {
-		return fmt.Errorf("不存在的db %s", dst.DB)
-	}
+func (m *MsgDAO) CreateMsg(ctx context.Context, table string, message DelayMsg) error {
 	now := time.Now().UnixMilli()
 	message.Ctime = now
 	message.Utime = now
-	return db.WithContext(ctx).Table(dst.Table).Create(&message).Error
+	return m.db.WithContext(ctx).Table(table).Create(&message).Error
 }
 
-func (m *MsgDAO) FindMsgs(ctx context.Context, offset, limit int, dst sharding.DST) ([]DelayMsg, error) {
-	db, ok := m.dbs[dst.DB]
-	if !ok {
-		return nil, fmt.Errorf("不存在的db %s", dst.DB)
-	}
+func (m *MsgDAO) FindMsgs(ctx context.Context, table string, offset, limit int) ([]DelayMsg, error) {
 	now := time.Now().UnixMilli()
 	var res []DelayMsg
-	err := db.WithContext(ctx).Table(dst.Table).
+	err := m.db.WithContext(ctx).Table(table).
 		Where("send_time <= ? AND status = ?", now, MsgStatusInit).
 		Offset(offset).Limit(limit).Find(&res).Error
 	return res, err
 }
 
-func (m *MsgDAO) UpdateMsg(ctx context.Context, key string, fields map[string]any, dst sharding.DST) error {
-	db, ok := m.dbs[dst.DB]
-	if !ok {
-		return fmt.Errorf("不存在的db %s", dst.DB)
+func (m *MsgDAO) UpdateMsg(ctx context.Context, table string, key string, fields map[string]any) error {
+	res := m.db.WithContext(ctx).Table(table).Where(DelayMsg{Key: key}).Updates(fields)
+	if res.Error != nil {
+		return res.Error
 	}
-	return db.WithContext(ctx).Table(dst.Table).Where(DelayMsg{Key: key}).Updates(fields).Error
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

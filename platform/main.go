@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/meoying/kafka-ext/config"
@@ -40,17 +41,16 @@ func main() {
 		panic(err)
 	}
 
-	cfg := sarama.NewConfig()
-	consumer, err := initConsumer(c, cfg)
+	consumer, err := initConsumer(c)
 	if err != nil {
 		panic(err)
 	}
-	producer, err := initProducer(c, cfg)
+	producer, err := initProducer(c)
 	if err != nil {
 		panic(err)
 	}
 
-	sharding, err := initSharding(c)
+	dispatcher, err := initSharding(c)
 	if err != nil {
 		panic(err)
 	}
@@ -60,14 +60,14 @@ func main() {
 		panic(err)
 	}
 
-	dao := dao2.NewMsgDAO(dbs)
-	repo := repository.NewMsgRepository(dao)
+	manager := dao2.NewGormManager(dbs)
+	repo := repository.NewMsgRepository(dispatcher, manager)
 
-	consumerSvc := service.NewConsumerService(repo, sharding)
+	consumerSvc := service.NewConsumerService(repo)
 	producerSvc := service.NewProducerService(producer, repo)
 
 	delayConsumer := consumer2.NewDelayConsumer(consumerSvc)
-	scheduler := job2.NewScheduler(sharding, producerSvc, lockCli)
+	scheduler := job2.NewScheduler(dispatcher, producerSvc, lockCli)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -107,7 +107,8 @@ func initDB(c config.Config) (map[string]*gorm.DB, error) {
 	return dbs, nil
 }
 
-func initConsumer(c config.Config, cfg *sarama.Config) (sarama.ConsumerGroup, error) {
+func initConsumer(c config.Config) (sarama.ConsumerGroup, error) {
+	cfg := sarama.NewConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	consumer, err := sarama.NewConsumerGroup([]string{c.Kafka.Addr},
 		c.Kafka.GroupID, cfg)
@@ -117,7 +118,8 @@ func initConsumer(c config.Config, cfg *sarama.Config) (sarama.ConsumerGroup, er
 	return consumer, nil
 }
 
-func initProducer(c config.Config, cfg *sarama.Config) (sarama.SyncProducer, error) {
+func initProducer(c config.Config) (sarama.SyncProducer, error) {
+	cfg := sarama.NewConfig()
 	cfg.Producer.Return.Successes = true
 	cfg.Producer.RequiredAcks = sarama.WaitForLocal
 	cfg.Producer.Partitioner = sarama.NewRandomPartitioner
@@ -139,9 +141,9 @@ func initConfig(c *config.Config) error {
 		return fmt.Errorf("解析 datasource 配置失败: %w", err)
 	}
 
-	err = viper.UnmarshalKey("algorithm", &c.Algorithm)
+	err = viper.UnmarshalKey("sharding", &c.Sharding)
 	if err != nil {
-		return fmt.Errorf("解析 algorithm 配置失败: %w", err)
+		return fmt.Errorf("解析 sharding 配置失败: %w", err)
 	}
 
 	err = viper.UnmarshalKey("lock", &c.Lock)
@@ -156,27 +158,79 @@ func initConfig(c *config.Config) error {
 	return nil
 }
 
-func initSharding(c config.Config) (*sharding2.Sharding, error) {
-	var algorithm sharding2.Strategy
-	switch c.Algorithm.Type {
-	case "hash":
-		dbPattern := strategy.Pattern{
-			Base:     c.Algorithm.Hash.DBPattern.Base,
-			Name:     c.Algorithm.Hash.DBPattern.Name,
-			Sharding: c.Algorithm.Hash.DBPattern.Sharding,
-		}
-		tablePattern := strategy.Pattern{
-			Base:     c.Algorithm.Hash.TablePattern.Base,
-			Name:     c.Algorithm.Hash.TablePattern.Name,
-			Sharding: c.Algorithm.Hash.TablePattern.Sharding,
-		}
-		algorithm = strategy.NewHashSharding(dbPattern, tablePattern)
-	case "range":
-		algorithm = strategy.NewTimeRange(c.Algorithm.Range.DB, c.Algorithm.Range.Table, c.Algorithm.Range.Retention, c.Algorithm.Range.Interval)
-	default:
-		return nil, fmt.Errorf("未知的分库分表算法类型 %s", c.Algorithm.Type)
+func initSharding(c config.Config) (*sharding2.Dispatcher, error) {
+	if len(c.Sharding.BizStrategy) <= 0 {
+		return nil, fmt.Errorf("bizStrategy 配置为空")
 	}
-	return sharding2.NewSharding(algorithm), nil
+
+	const (
+		StrategyHash = "hash"
+	)
+	// 每个 biz 使用的 strategy
+	bizStrategy := make(map[string]string)
+	strategies := make(map[string]sharding2.Strategy)
+
+	// 初始化所有用到的 strategy
+	for _, bs := range c.Sharding.BizStrategy {
+		switch bs.Strategy {
+		case StrategyHash:
+			hashCfg, ok := c.Sharding.Strategy[StrategyHash]
+			if !ok || hashCfg == nil {
+				return nil, fmt.Errorf("分库分表策略 hash 配置为空")
+			}
+			s, err := initHashStrategy(hashCfg)
+			if err != nil {
+				return nil, err
+			}
+
+			strategies[s.Name()] = s
+			for _, biz := range bs.Biz {
+				bizStrategy[biz] = s.Name()
+			}
+		case "range":
+			//TODO: implement me
+			panic("range 策略暂未实现")
+		default:
+			return nil, fmt.Errorf("未知的策略类型 %s", bs.Strategy)
+		}
+	}
+	return sharding2.NewDispatcher(bizStrategy, strategies), nil
+}
+
+func initHashStrategy(hashCfg any) (strategy.Hash, error) {
+	const (
+		cfgDBdbPattern  = "dbpattern"
+		cfgTablePattern = "tablepattern"
+	)
+
+	cfg, ok := hashCfg.(map[string]any)
+	if !ok {
+		return strategy.Hash{}, fmt.Errorf("hash 策略配置解析失败")
+	}
+
+	dbCfg, ok := cfg[cfgDBdbPattern]
+	if !ok {
+		return strategy.Hash{}, fmt.Errorf("hash dbPattern 不存在")
+	}
+	var dbPattern strategy.HashPattern
+	data, _ := json.Marshal(&dbCfg)
+	err := json.Unmarshal(data, &dbPattern)
+	if err != nil {
+		return strategy.Hash{}, fmt.Errorf("hash dbPattern 配置解析失败")
+	}
+
+	tableCfg, ok := cfg[cfgTablePattern]
+	if !ok {
+		return strategy.Hash{}, fmt.Errorf("hash tablePattern 不存在")
+	}
+	var tablePattern strategy.HashPattern
+	data, _ = json.Marshal(&tableCfg)
+	err = json.Unmarshal(data, &tablePattern)
+	if err != nil {
+		return strategy.Hash{}, fmt.Errorf("hash tablePattern 配置解析失败")
+	}
+
+	return strategy.NewHashSharding(dbPattern, tablePattern), nil
 }
 
 func initLockClient(c config.Config) (lock.Client, error) {

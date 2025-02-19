@@ -13,7 +13,6 @@ import (
 	"github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
 	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
-	"github.com/meoying/kafka-ext/internal/sharding/strategy"
 	"github.com/meoying/kafka-ext/internal/test/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,6 +28,7 @@ type ProducerTestSuite struct {
 	suite.Suite
 	db         *gorm.DB
 	lockClient dlock.Client
+	dispatcher *sharding2.Dispatcher
 }
 
 func TestProducer(t *testing.T) {
@@ -38,6 +38,10 @@ func TestProducer(t *testing.T) {
 func (s *ProducerTestSuite) SetupSuite() {
 	var c config.Config
 	initCfg(s.T(), &c)
+
+	dispatcher, err := initSharding(s.T(), c)
+	require.NoError(s.T(), err)
+	s.dispatcher = dispatcher
 
 	db, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
@@ -164,13 +168,10 @@ func (s *ProducerTestSuite) TestProducer() {
 			dbs := map[string]*gorm.DB{
 				dbName: s.db,
 			}
-			dbDAO := dao.NewMsgDAO(dbs)
-			repo := repository.NewMsgRepository(dbDAO)
+			manager := dao.NewGormManager(dbs)
+			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
-			
-			notSharding := strategy.NewNotSharding(dbName, tableName)
-			sharding := sharding2.NewSharding(notSharding)
-			scheduler := job.NewScheduler(sharding, svc, s.lockClient)
+			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 			defer cancel()

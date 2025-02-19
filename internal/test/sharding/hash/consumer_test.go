@@ -2,6 +2,7 @@ package not_sharding
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/meoying/kafka-ext/config"
@@ -28,65 +29,30 @@ const (
 	db_1    = "kafka_ext_db_1"
 	table_0 = "delay_msgs_tab_0"
 	table_1 = "delay_msgs_tab_1"
+	bizA    = "bizA"
+	bizB    = "bizB"
 )
 
 type ConsumerTestSuite struct {
 	suite.Suite
-	dbs      map[string]*gorm.DB
-	producer sarama.SyncProducer
-
-	dbPattern    strategy.Pattern
-	tablePattern strategy.Pattern
+	dbs        map[string]*gorm.DB
+	producer   sarama.SyncProducer
+	dispatcher *sharding2.Dispatcher
 }
 
 func TestConsumer(t *testing.T) {
 	suite.Run(t, new(ConsumerTestSuite))
 }
 
-func initCfg(t *testing.T, c *config.Config) {
-	viper.SetConfigFile("config/config.yaml")
-	err := viper.ReadInConfig()
-	require.NoError(t, err)
-
-	err = viper.UnmarshalKey("datasource", &c.DataSource)
-	require.NoError(t, err)
-	require.Equal(t, 2, len(c.DataSource))
-	require.Equal(t, db_0, c.DataSource[0].Name)
-	require.Equal(t, db_1, c.DataSource[1].Name)
-
-	err = viper.UnmarshalKey("algorithm", &c.Algorithm)
-	require.NoError(t, err)
-
-	// 断言分库分表的配置信息
-	require.Equal(t, "hash", c.Algorithm.Type)
-
-	require.True(t, c.Algorithm.Hash.DBPattern.Sharding)
-	require.Equal(t, 2, c.Algorithm.Hash.DBPattern.Base)
-	require.Equal(t, "kafka_ext_db_%d", c.Algorithm.Hash.DBPattern.Name)
-
-	require.Equal(t, 2, c.Algorithm.Hash.TablePattern.Base)
-	require.True(t, c.Algorithm.Hash.TablePattern.Sharding)
-	require.Equal(t, "delay_msgs_tab_%d", c.Algorithm.Hash.TablePattern.Name)
-}
-
 func (s *ConsumerTestSuite) SetupSuite() {
+	s.dbs = make(map[string]*gorm.DB)
+
 	var c config.Config
 	initCfg(s.T(), &c)
 
-	dbPattern := strategy.Pattern{
-		Base:     c.Algorithm.Hash.DBPattern.Base,
-		Name:     c.Algorithm.Hash.DBPattern.Name,
-		Sharding: c.Algorithm.Hash.DBPattern.Sharding,
-	}
-	tablePattern := strategy.Pattern{
-		Base:     c.Algorithm.Hash.TablePattern.Base,
-		Name:     c.Algorithm.Hash.TablePattern.Name,
-		Sharding: c.Algorithm.Hash.TablePattern.Sharding,
-	}
-	s.dbPattern = dbPattern
-	s.tablePattern = tablePattern
-
-	s.dbs = make(map[string]*gorm.DB)
+	dispatcher, err := initSharding(s.T(), c)
+	require.NoError(s.T(), err)
+	s.dispatcher = dispatcher
 
 	db0, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
@@ -119,12 +85,6 @@ func (s *ConsumerTestSuite) TearDownTest() {
 }
 
 func (s *ConsumerTestSuite) TestConsumer() {
-	hashSharding := strategy.NewHashSharding(s.dbPattern, s.tablePattern)
-	// 修改哈希函数
-	hashSharding.Hash = hash
-	//notSharding := strategy.NewNotSharding(dbName, tableName)
-	sharding := sharding2.NewSharding(hashSharding)
-
 	cfg := sarama.NewConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	consumer, err := sarama.NewConsumerGroup([]string{"localhost:9094"},
@@ -132,9 +92,9 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	require.NoError(s.T(), err)
 	defer consumer.Close()
 
-	dbDAO := dao.NewMsgDAO(s.dbs)
-	repo := repository.NewMsgRepository(dbDAO)
-	svc := service.NewConsumerService(repo, sharding)
+	manager := dao.NewGormManager(s.dbs)
+	repo := repository.NewMsgRepository(s.dispatcher, manager)
+	svc := service.NewConsumerService(repo)
 	delayConsumer := consumer2.NewDelayConsumer(svc)
 
 	// 往kafka中发几条消息
@@ -160,7 +120,7 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	err = s.dbs[db_0].Table(table_0).WithContext(ctx1).Find(&res).Error
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(res))
-	assert.Equal(s.T(), db_0, res[0].Biz)
+	assert.Equal(s.T(), bizA, res[0].Biz)
 	assert.Equal(s.T(), table_0, res[0].Key)
 	assert.True(s.T(), res[0].Utime > 0)
 
@@ -168,7 +128,7 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	err = s.dbs[db_0].Table(table_1).WithContext(ctx1).Find(&res).Error
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(res))
-	assert.Equal(s.T(), db_0, res[0].Biz)
+	assert.Equal(s.T(), bizA, res[0].Biz)
 	assert.Equal(s.T(), table_1, res[0].Key)
 	assert.True(s.T(), res[0].Utime > 0)
 
@@ -179,7 +139,7 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	err = s.dbs[db_1].Table(table_0).WithContext(ctx2).Find(&res).Error
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(res))
-	assert.Equal(s.T(), db_1, res[0].Biz)
+	assert.Equal(s.T(), bizB, res[0].Biz)
 	assert.Equal(s.T(), table_0, res[0].Key)
 	assert.True(s.T(), res[0].Utime > 0)
 
@@ -187,7 +147,7 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	err = s.dbs[db_1].Table(table_1).WithContext(ctx2).Find(&res).Error
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), 1, len(res))
-	assert.Equal(s.T(), db_1, res[0].Biz)
+	assert.Equal(s.T(), bizB, res[0].Biz)
 	assert.Equal(s.T(), table_1, res[0].Key)
 	assert.True(s.T(), res[0].Utime > 0)
 }
@@ -197,28 +157,33 @@ func produceMsg() []*sarama.ProducerMessage {
 	return []*sarama.ProducerMessage{
 		{
 			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(db_0, table_0)),
+			// db0 table 0
+			Value: sarama.StringEncoder(genMsg("bizA", table_0)),
+		},
+		{
+
+			Topic: "test_topic",
+			// db0 table 1
+			Value: sarama.StringEncoder(genMsg("bizA", table_1)),
 		},
 		{
 			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(db_0, table_1)),
+			// db1 table 0
+			Value: sarama.StringEncoder(genMsg("bizB", table_0)),
 		},
 		{
 			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(db_1, table_0)),
-		},
-		{
-			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(db_1, table_1)),
+			// db1 table 1
+			Value: sarama.StringEncoder(genMsg("bizB", table_1)),
 		},
 	}
 }
 
-func genMsg(db, table string) string {
+func genMsg(biz, table string) string {
 	dMsg := msg.DelayMessage{
-		Key:      fmt.Sprintf("%s", table),
-		Biz:      fmt.Sprintf("%s", db),
-		Content:  fmt.Sprintf("msg-content-%s:%s", db, table),
+		Key:      table,
+		Biz:      biz,
+		Content:  fmt.Sprintf("msg-content-%s:%s", biz, table),
 		BizTopic: "biz_topic",
 		SendTime: time.Now().Add(time.Second * 3).UnixMilli(),
 	}
@@ -226,12 +191,14 @@ func genMsg(db, table string) string {
 }
 
 func hash(key string, base int) int {
-	if strings.Contains(key, db_0) {
+	// 返回 目标库的编号
+	if strings.Contains(key, bizA) {
 		return 0
 	}
-	if strings.Contains(key, db_1) {
+	if strings.Contains(key, bizB) {
 		return 1
 	}
+	// 返回 目标表的编号
 	if strings.Contains(key, table_0) {
 		return 0
 	}
@@ -240,4 +207,91 @@ func hash(key string, base int) int {
 	}
 
 	return -1
+}
+
+func initCfg(t *testing.T, c *config.Config) {
+	viper.SetConfigFile("config/config.yaml")
+	err := viper.ReadInConfig()
+	require.NoError(t, err)
+
+	err = viper.UnmarshalKey("datasource", &c.DataSource)
+	require.NoError(t, err)
+	require.Equal(t, 2, len(c.DataSource))
+	require.Equal(t, db_0, c.DataSource[0].Name)
+	require.Equal(t, db_1, c.DataSource[1].Name)
+
+	err = viper.UnmarshalKey("sharding", &c.Sharding)
+	require.NoError(t, err)
+}
+
+func initSharding(t *testing.T, c config.Config) (*sharding2.Dispatcher, error) {
+	if len(c.Sharding.BizStrategy) <= 0 {
+		return nil, fmt.Errorf("bizStrategy 配置为空")
+	}
+
+	const (
+		StrategyHash = "hash"
+	)
+	// 每个 biz 使用的 strategy
+	bizStrategy := make(map[string]string)
+	strategies := make(map[string]sharding2.Strategy)
+
+	// 初始化所有用到的 strategy
+	for _, bs := range c.Sharding.BizStrategy {
+		switch bs.Strategy {
+		case StrategyHash:
+			hashCfg, ok := c.Sharding.Strategy[StrategyHash]
+			require.True(t, ok)
+			hashStrategy, err := initHashStrategy(t, hashCfg)
+			// 修改哈希函数
+			hashStrategy.Hash = hash
+			require.NoError(t, err)
+			strategies[hashStrategy.Name()] = hashStrategy
+			for _, biz := range bs.Biz {
+				bizStrategy[biz] = hashStrategy.Name()
+			}
+		default:
+			return nil, fmt.Errorf("未知的策略类型 %s", bs.Strategy)
+		}
+	}
+
+	require.True(t, len(strategies) == 1)
+	wantBizStrategy := map[string]string{
+		"bizA": "hash",
+		"bizB": "hash",
+	}
+	require.Equal(t, wantBizStrategy, bizStrategy)
+
+	return sharding2.NewDispatcher(bizStrategy, strategies), nil
+}
+
+func initHashStrategy(t *testing.T, hashCfg any) (strategy.Hash, error) {
+	const (
+		cfgDBdbPattern  = "dbpattern"
+		cfgTablePattern = "tablepattern"
+	)
+
+	cfg, ok := hashCfg.(map[string]any)
+	require.True(t, ok)
+
+	dbCfg, ok := cfg[cfgDBdbPattern]
+	require.True(t, ok)
+	var dbPattern strategy.HashPattern
+	data, _ := json.Marshal(&dbCfg)
+	err := json.Unmarshal(data, &dbPattern)
+	require.NoError(t, err)
+
+	tableCfg, ok := cfg[cfgTablePattern]
+	require.True(t, ok)
+	var tablePattern strategy.HashPattern
+	data, _ = json.Marshal(&tableCfg)
+	err = json.Unmarshal(data, &tablePattern)
+	require.NoError(t, err)
+	// 断言配置信息
+	require.True(t, dbPattern.Sharding)
+	require.True(t, tablePattern.Sharding)
+	require.Equal(t, "kafka_ext_db_%d", dbPattern.Name)
+	require.Equal(t, "delay_msgs_tab_%d", tablePattern.Name)
+
+	return strategy.NewHashSharding(dbPattern, tablePattern), nil
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/ecodeclub/ekit/slice"
 	_ "github.com/ecodeclub/ekit/slice"
+	"github.com/ecodeclub/ekit/syncx/atomicx"
 	"github.com/meoying/kafka-ext/internal/pkg/lock"
 	"github.com/meoying/kafka-ext/internal/service"
 	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
@@ -16,19 +17,19 @@ import (
 // 1. 自动发现新的分片，为新的分片自动创建一个定时任务
 // 2. 关闭在已淘汰的分片上运行的定时任务
 type Scheduler struct {
-	sharding   *sharding2.Sharding
+	dispatcher *sharding2.Dispatcher
 	jobSvc     *service.ProducerService
 	lockClient lock.Client
 	Logger     *slog.Logger
 
 	cancelFns map[string]context.CancelFunc
 	// 当前正在使用的分片
-	currentDsts []sharding2.DST
+	currentDsts atomicx.Value[[]sharding2.DST]
 }
 
-func NewScheduler(sharding *sharding2.Sharding, jobSvc *service.ProducerService, lockClient lock.Client) *Scheduler {
+func NewScheduler(dispatcher *sharding2.Dispatcher, jobSvc *service.ProducerService, lockClient lock.Client) *Scheduler {
 	return &Scheduler{
-		sharding:   sharding,
+		dispatcher: dispatcher,
 		jobSvc:     jobSvc,
 		lockClient: lockClient,
 		Logger:     slog.Default(),
@@ -42,8 +43,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 
 func (s *Scheduler) schedule(ctx context.Context) {
 	// 在初始时，为所有有效分片创建出一个定时任务
-	dsts := s.sharding.GetEffectiveTables()
-	s.currentDsts = dsts
+	// 一张表就会有一个对应的 Sender
+	dsts := s.dispatcher.GetEffectiveTables()
+	s.currentDsts.Store(dsts)
 	for _, dst := range dsts {
 		s.createTask(ctx, dst)
 	}
@@ -53,10 +55,19 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	go s.watch(ctx)
 }
 
+func (s *Scheduler) tableExist(dst sharding2.DST) bool {
+	// TODO：检测分片是否存在
+	return true
+}
+
 func (s *Scheduler) createTask(ctx context.Context, dst sharding2.DST) {
+	if !s.tableExist(dst) {
+		return
+	}
+
 	key := s.key(dst)
 	s.Logger.Info("创建分片定时任务", slog.String("key", key))
-
+	// 每个分片都有一个自己的定时任务
 	task := NewDelayProducerJob(s.jobSvc, s.lockClient, dst)
 	taskCtx, cancel := context.WithCancel(ctx)
 	task.Run(taskCtx)
@@ -80,21 +91,21 @@ func (s *Scheduler) watch(ctx context.Context) {
 }
 
 func (s *Scheduler) adjustTask(ctx context.Context) {
-	latest := s.sharding.GetEffectiveTables()
+	latest := s.dispatcher.GetEffectiveTables()
 	// 比较新旧分片
 	// latest 有的，cur 没有，就是新表，需要创建定时任务
 	// cur 有的，latest 没有，就是已经停止使用的表，需要关闭它们的定时任务
-	newShadings := slice.DiffSet(latest, s.currentDsts)
+	newShadings := slice.DiffSet(latest, s.currentDsts.Load())
 	for _, dst := range newShadings {
 		s.createTask(ctx, dst)
 	}
 
-	eliminations := slice.DiffSet(s.currentDsts, latest)
+	eliminations := slice.DiffSet(s.currentDsts.Load(), latest)
 	for _, dst := range eliminations {
 		s.stopTask(dst)
 	}
 
-	s.currentDsts = latest
+	s.currentDsts.Store(latest)
 }
 
 func (s *Scheduler) stopTask(dst sharding2.DST) {

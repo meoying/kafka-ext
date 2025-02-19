@@ -13,7 +13,6 @@ import (
 	"github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
 	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
-	"github.com/meoying/kafka-ext/internal/sharding/strategy"
 	"github.com/meoying/kafka-ext/internal/test/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -29,7 +28,7 @@ type ProducerTestSuite struct {
 	suite.Suite
 	dbs        map[string]*gorm.DB
 	lockClient dlock.Client
-	sharding   *sharding2.Sharding
+	dispatcher *sharding2.Dispatcher
 }
 
 func TestProducer(t *testing.T) {
@@ -37,24 +36,16 @@ func TestProducer(t *testing.T) {
 }
 
 func (s *ProducerTestSuite) SetupSuite() {
+	s.dbs = make(map[string]*gorm.DB)
+
 	var c config.Config
 	initCfg(s.T(), &c)
 
-	dbPattern := strategy.Pattern{
-		Base:     c.Algorithm.Hash.DBPattern.Base,
-		Name:     c.Algorithm.Hash.DBPattern.Name,
-		Sharding: c.Algorithm.Hash.DBPattern.Sharding,
-	}
-	tablePattern := strategy.Pattern{
-		Base:     c.Algorithm.Hash.TablePattern.Base,
-		Name:     c.Algorithm.Hash.TablePattern.Name,
-		Sharding: c.Algorithm.Hash.TablePattern.Sharding,
-	}
+	dispatcher, err := initSharding(s.T(), c)
+	require.NoError(s.T(), err)
+	s.dispatcher = dispatcher
 
-	hashSharding := strategy.NewHashSharding(dbPattern, tablePattern)
-	sharding := sharding2.NewSharding(hashSharding)
-
-	dsts := sharding.GetEffectiveTables()
+	dsts := dispatcher.GetEffectiveTables()
 	// 断言有4个分片
 	want := []sharding2.DST{
 		{
@@ -75,9 +66,6 @@ func (s *ProducerTestSuite) SetupSuite() {
 		},
 	}
 	require.Equal(s.T(), want, dsts)
-
-	s.sharding = sharding
-	s.dbs = make(map[string]*gorm.DB)
 
 	db0, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
@@ -120,51 +108,61 @@ func (s *ProducerTestSuite) TestProducer() {
 				producer.EXPECT().SendMessage(&sarama.ProducerMessage{
 					Topic:     "biz-topic",
 					Partition: 0,
-					Key:       sarama.StringEncoder("key1"),
+					Key:       sarama.StringEncoder("success_key"),
 					Value:     sarama.StringEncoder("第一条消息"),
-				}).AnyTimes().Return(int32(1), int64(1), nil)
+				}).Times(4).Return(int32(1), int64(1), nil)
 				return producer
 			},
 			before: func() {
-				// 两个db，共4张表，每张表上都有一条待发的消息
-				s.insertMsg(s.dbs[db_0], table_0)
-				s.insertMsg(s.dbs[db_0], table_1)
-				s.insertMsg(s.dbs[db_1], table_0)
-				s.insertMsg(s.dbs[db_1], table_1)
+				// db0 table0
+				s.insertMsg(s.dbs[db_0], "success_key", bizA, table_0)
+				// db0 table1
+				s.insertMsg(s.dbs[db_0], "success_key", bizA, table_1)
+				// db1 table0
+				s.insertMsg(s.dbs[db_1], "success_key", bizB, table_0)
+				// db1 table1
+				s.insertMsg(s.dbs[db_1], "success_key", bizB, table_1)
 			},
 			after: func() {
-				// 4张表上都有一个定时任务
-				s.assertMsg(s.dbs[db_0], table_0, dao.MsgStatusSuccess)
-				s.assertMsg(s.dbs[db_0], table_1, dao.MsgStatusSuccess)
-				s.assertMsg(s.dbs[db_1], table_0, dao.MsgStatusSuccess)
-				s.assertMsg(s.dbs[db_1], table_1, dao.MsgStatusSuccess)
+				// db0 table0
+				s.assertMsg(s.dbs[db_0], "success_key", table_0, dao.MsgStatusSuccess)
+
+				// db0 table1
+				s.assertMsg(s.dbs[db_0], "success_key", table_1, dao.MsgStatusSuccess)
+
+				// db1 table0
+				s.assertMsg(s.dbs[db_1], "success_key", table_0, dao.MsgStatusSuccess)
+
+				// db1 table1
+				s.assertMsg(s.dbs[db_1], "success_key", table_1, dao.MsgStatusSuccess)
 			},
 		},
 		{
 			name: "发送失败",
 			mock: func(ctrl *gomock.Controller) sarama.SyncProducer {
 				producer := mocks.NewMockSyncProducer(ctrl)
-				producer.EXPECT().SendMessage(&sarama.ProducerMessage{
-					Topic:     "biz-topic",
-					Partition: 0,
-					Key:       sarama.StringEncoder("key1"),
-					Value:     sarama.StringEncoder("第一条消息"),
-				}).AnyTimes().Return(int32(1), int64(1), errors.New("mock error"))
+				producer.EXPECT().SendMessage(gomock.Any()).AnyTimes().Return(int32(1), int64(1), errors.New("mock error"))
 				return producer
 			},
 			before: func() {
-				// 两个db，共4张表，每张表上都有一条待发的消息
-				s.insertMsg(s.dbs[db_0], table_0)
-				s.insertMsg(s.dbs[db_0], table_1)
-				s.insertMsg(s.dbs[db_1], table_0)
-				s.insertMsg(s.dbs[db_1], table_1)
+				// db0 table0
+				s.insertMsg(s.dbs[db_0], "failed_key", bizA, table_0)
+				// db0 table1
+				s.insertMsg(s.dbs[db_0], "failed_key", bizA, table_1)
+				// db1 table0
+				s.insertMsg(s.dbs[db_1], "failed_key", bizB, table_0)
+				// db1 table1
+				s.insertMsg(s.dbs[db_1], "failed_key", bizB, table_1)
 			},
 			after: func() {
-				// 4张表上都有一个定时任务
-				s.assertMsg(s.dbs[db_0], table_0, dao.MsgStatusFail)
-				s.assertMsg(s.dbs[db_0], table_1, dao.MsgStatusFail)
-				s.assertMsg(s.dbs[db_1], table_0, dao.MsgStatusFail)
-				s.assertMsg(s.dbs[db_1], table_1, dao.MsgStatusFail)
+				// db0 table0
+				s.assertMsg(s.dbs[db_0], "failed_key", table_0, dao.MsgStatusFail)
+				// db0 table1
+				s.assertMsg(s.dbs[db_0], "failed_key", table_1, dao.MsgStatusFail)
+				// db1 table0
+				s.assertMsg(s.dbs[db_1], "failed_key", table_0, dao.MsgStatusFail)
+				// db1 table1
+				s.assertMsg(s.dbs[db_1], "failed_key", table_1, dao.MsgStatusFail)
 			},
 		},
 	}
@@ -176,13 +174,12 @@ func (s *ProducerTestSuite) TestProducer() {
 			tc.before()
 
 			producer := tc.mock(ctrl)
-			dbDAO := dao.NewMsgDAO(s.dbs)
-			repo := repository.NewMsgRepository(dbDAO)
+			manager := dao.NewGormManager(s.dbs)
+			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
+			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient)
 
-			scheduler := job.NewScheduler(s.sharding, svc, s.lockClient)
-
-			ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
 			scheduler.Start(ctx)
 			<-ctx.Done()
@@ -192,16 +189,16 @@ func (s *ProducerTestSuite) TestProducer() {
 	}
 }
 
-func (s *ProducerTestSuite) insertMsg(db *gorm.DB, table string) {
+func (s *ProducerTestSuite) insertMsg(db *gorm.DB, key, biz string, table string) {
 	now := time.Now()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel()
 	err := db.WithContext(ctx).Table(table).Create(&dao.DelayMsg{
-		Key: "key1",
-		Biz: "test-biz",
+		Key: key,
+		Biz: biz,
 		Data: msg.DelayMessage{
-			Key:      "key1",
-			Biz:      "test-biz",
+			Key:      key,
+			Biz:      biz,
 			Content:  "第一条消息",
 			BizTopic: "biz-topic",
 			SendTime: now.Add(time.Second).UnixMilli(),
@@ -215,10 +212,10 @@ func (s *ProducerTestSuite) insertMsg(db *gorm.DB, table string) {
 	require.NoError(s.T(), err)
 }
 
-func (s *ProducerTestSuite) assertMsg(db *gorm.DB, table string, wantStatus uint8) {
+func (s *ProducerTestSuite) assertMsg(db *gorm.DB, key, table string, wantStatus uint8) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 	var res dao.DelayMsg
-	err := db.WithContext(ctx).Table(table).Where(dao.DelayMsg{Key: "key1"}).First(&res).Error
+	err := db.WithContext(ctx).Table(table).Where(dao.DelayMsg{Key: key}).First(&res).Error
 	cancel()
 	require.NoError(s.T(), err)
 	assert.Equal(s.T(), wantStatus, res.Status)

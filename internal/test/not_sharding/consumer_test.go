@@ -2,6 +2,7 @@ package not_sharding
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
 	"github.com/meoying/kafka-ext/config"
@@ -29,11 +30,9 @@ const (
 
 type ConsumerTestSuite struct {
 	suite.Suite
-	db       *gorm.DB
-	producer sarama.SyncProducer
-
-	dbPattern    strategy.Pattern
-	tablePattern strategy.Pattern
+	db         *gorm.DB
+	producer   sarama.SyncProducer
+	dispatcher *sharding2.Dispatcher
 }
 
 func TestConsumer(t *testing.T) {
@@ -50,33 +49,17 @@ func initCfg(t *testing.T, c *config.Config) {
 	require.Equal(t, 1, len(c.DataSource))
 	require.Equal(t, dbName, c.DataSource[0].Name)
 
-	err = viper.UnmarshalKey("algorithm", &c.Algorithm)
+	err = viper.UnmarshalKey("sharding", &c.Sharding)
 	require.NoError(t, err)
-
-	// 断言是不分库分表的配置信息
-	require.Equal(t, "hash", c.Algorithm.Type)
-	require.True(t, !c.Algorithm.Hash.DBPattern.Sharding)
-	require.True(t, !c.Algorithm.Hash.TablePattern.Sharding)
-	require.Equal(t, dbName, c.Algorithm.Hash.DBPattern.Name)
-	require.Equal(t, tableName, c.Algorithm.Hash.TablePattern.Name)
 }
 
 func (s *ConsumerTestSuite) SetupSuite() {
 	var c config.Config
 	initCfg(s.T(), &c)
 
-	dbPattern := strategy.Pattern{
-		Base:     c.Algorithm.Hash.DBPattern.Base,
-		Name:     c.Algorithm.Hash.DBPattern.Name,
-		Sharding: c.Algorithm.Hash.DBPattern.Sharding,
-	}
-	tablePattern := strategy.Pattern{
-		Base:     c.Algorithm.Hash.TablePattern.Base,
-		Name:     c.Algorithm.Hash.TablePattern.Name,
-		Sharding: c.Algorithm.Hash.TablePattern.Sharding,
-	}
-	s.dbPattern = dbPattern
-	s.tablePattern = tablePattern
+	dispatcher, err := initSharding(s.T(), c)
+	require.NoError(s.T(), err)
+	s.dispatcher = dispatcher
 
 	db, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
@@ -104,10 +87,6 @@ func (s *ConsumerTestSuite) TestConsumer() {
 		dbName: s.db,
 	}
 
-	notSharding := strategy.NewHashSharding(s.dbPattern, s.tablePattern)
-	//notSharding := strategy.NewNotSharding(dbName, tableName)
-	sharding := sharding2.NewSharding(notSharding)
-
 	cfg := sarama.NewConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	consumer, err := sarama.NewConsumerGroup([]string{"localhost:9094"},
@@ -115,9 +94,9 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	require.NoError(s.T(), err)
 	defer consumer.Close()
 
-	dbDAO := dao.NewMsgDAO(dbs)
-	repo := repository.NewMsgRepository(dbDAO)
-	svc := service.NewConsumerService(repo, sharding)
+	manager := dao.NewGormManager(dbs)
+	repo := repository.NewMsgRepository(s.dispatcher, manager)
+	svc := service.NewConsumerService(repo)
 	delayConsumer := consumer2.NewDelayConsumer(svc)
 
 	// 往kafka中发几条消息
@@ -164,10 +143,80 @@ func produceMsg() []*sarama.ProducerMessage {
 func genMsg(seq int) string {
 	dMsg := msg.DelayMessage{
 		Key:      fmt.Sprintf("key-%d", seq),
-		Biz:      "test_biz",
+		Biz:      "bizA",
 		Content:  fmt.Sprintf("msg-content-%d", seq),
 		BizTopic: "biz_topic",
 		SendTime: time.Now().Add(time.Second * 3).UnixMilli(),
 	}
 	return string(dMsg.Encode())
+}
+
+func initSharding(t *testing.T, c config.Config) (*sharding2.Dispatcher, error) {
+	if len(c.Sharding.BizStrategy) <= 0 {
+		return nil, fmt.Errorf("bizStrategy 配置为空")
+	}
+
+	const (
+		StrategyHash = "hash"
+	)
+	// 每个 biz 使用的 strategy
+	bizStrategy := make(map[string]string)
+	strategies := make(map[string]sharding2.Strategy)
+
+	// 初始化所有用到的 strategy
+	for _, bs := range c.Sharding.BizStrategy {
+		switch bs.Strategy {
+		case StrategyHash:
+			hashCfg, ok := c.Sharding.Strategy[StrategyHash]
+			require.True(t, ok)
+			hash, err := initHashStrategy(t, hashCfg)
+			require.NoError(t, err)
+			strategies[hash.Name()] = hash
+			for _, biz := range bs.Biz {
+				bizStrategy[biz] = hash.Name()
+			}
+		default:
+			return nil, fmt.Errorf("未知的策略类型 %s", bs.Strategy)
+		}
+	}
+
+	require.True(t, len(strategies) == 1)
+	wantBizStrategy := map[string]string{
+		"bizA": "hash",
+		"bizB": "hash",
+	}
+	require.Equal(t, wantBizStrategy, bizStrategy)
+
+	return sharding2.NewDispatcher(bizStrategy, strategies), nil
+}
+
+func initHashStrategy(t *testing.T, hashCfg any) (strategy.Hash, error) {
+	const (
+		cfgDBdbPattern  = "dbpattern"
+		cfgTablePattern = "tablepattern"
+	)
+
+	cfg, ok := hashCfg.(map[string]any)
+	require.True(t, ok)
+
+	dbCfg, ok := cfg[cfgDBdbPattern]
+	require.True(t, ok)
+	var dbPattern strategy.HashPattern
+	data, _ := json.Marshal(&dbCfg)
+	err := json.Unmarshal(data, &dbPattern)
+	require.NoError(t, err)
+
+	tableCfg, ok := cfg[cfgTablePattern]
+	require.True(t, ok)
+	var tablePattern strategy.HashPattern
+	data, _ = json.Marshal(&tableCfg)
+	err = json.Unmarshal(data, &tablePattern)
+	require.NoError(t, err)
+	// 断言配置信息
+	require.True(t, !dbPattern.Sharding)
+	require.True(t, !tablePattern.Sharding)
+	require.Equal(t, dbName, dbPattern.Name)
+	require.Equal(t, tableName, tablePattern.Name)
+
+	return strategy.NewHashSharding(dbPattern, tablePattern), nil
 }

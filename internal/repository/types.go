@@ -7,7 +7,7 @@ import (
 )
 
 type MessageRepository interface {
-	CreateMsg(ctx context.Context, message msg2.DelayMessage, dst sharding.DST) error
+	CreateMsg(ctx context.Context, message msg2.DelayMessage) error
 	FindMsgs(ctx context.Context, offset, limit int, dst sharding.DST) ([]msg2.Message, error)
 	UpdateMsg(ctx context.Context, key string, fields map[string]any, dst sharding.DST) error
 }

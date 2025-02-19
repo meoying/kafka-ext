@@ -6,12 +6,12 @@ type NotSharding struct {
 }
 
 func NewNotSharding(db string, table string) NotSharding {
-	dbPattern := Pattern{
+	dbPattern := HashPattern{
 		Base:     1,
 		Name:     db,
 		Sharding: false,
 	}
-	tablePattern := Pattern{
+	tablePattern := HashPattern{
 		Base:     1,
 		Name:     table,
 		Sharding: false,

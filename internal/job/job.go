@@ -39,6 +39,11 @@ func (p *DelayProducerJob) do(ctx context.Context) {
 	p.Logger = p.Logger.With(slog.String("key", key))
 	interval := time.Minute
 	for {
+		if !p.tableExist(p.dst) {
+			p.Logger.Info("检测到分片不存在，退出消息发送任务")
+			return
+		}
+
 		lock, err := p.lockClient.NewLock(ctx, key, interval)
 		if err != nil {
 			p.Logger.Error("初始化分布式锁失败", slog.Any("err", err))
@@ -123,4 +128,9 @@ func (p *DelayProducerJob) refreshAndSendMsgs(ctx context.Context, lock dlock.Lo
 			// 继续执行
 		}
 	}
+}
+
+func (p *DelayProducerJob) tableExist(dst sharding.DST) bool {
+	// TODO：检测分片是否存在
+	return true
 }

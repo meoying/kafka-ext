@@ -208,11 +208,11 @@ func (l *Lock) Refresh(ctx context.Context) error {
 // DistributedLock 在数据库中保存的代表锁的东西
 // 注意这里我们不需要一个 expiration 字段
 type DistributedLock struct {
-	Id int64 `gorm:"primaryKey,autoIncrement"`
+	Id int64 `gorm:"primaryKey:autoIncrement"`
 	// 唯一索引
-	Key string `gorm:"unique,type=VARCHAR(256)"`
+	Key string `gorm:"uniqueIndex;type:VARCHAR(256)"`
 	// 用固定长度的 CHAR 稍微有点性能提升
-	Value string `gorm:"type=CHAR(64)"`
+	Value string `gorm:"type:CHAR(64)"`
 
 	Status uint8
 

@@ -8,13 +8,13 @@ import (
 
 // Hash 哈希分库分表算法
 type Hash struct {
-	dbPattern    Pattern
-	tablePattern Pattern
+	dbPattern    HashPattern
+	tablePattern HashPattern
 	// 哈希函数。方便写测试
 	Hash func(key string, base int) int
 }
 
-func NewHashSharding(dbPattern Pattern, tablePattern Pattern) Hash {
+func NewHashSharding(dbPattern, tablePattern HashPattern) Hash {
 	return Hash{dbPattern: dbPattern, tablePattern: tablePattern, Hash: hash}
 }
 
@@ -90,8 +90,8 @@ func hash(key string, base int) int {
 	return hash % base
 }
 
-type Pattern struct {
-	Base     int
-	Name     string
-	Sharding bool
+type HashPattern struct {
+	Base     int    `json:"base" yaml:"base"`
+	Name     string `json:"name" yaml:"name"`
+	Sharding bool   `json:"sharding" yaml:"sharding"`
 }

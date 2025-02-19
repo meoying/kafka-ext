@@ -81,9 +81,9 @@ func (p *ProducerService) sengMsg(ctx context.Context, msg msg2.Message, dst sha
 		field["status"] = dao.MsgStatusSuccess
 	}
 
-	dbCtx, cancel := context.WithTimeout(ctx, time.Second*3)
+	dbCtx, dbCancel := context.WithTimeout(ctx, time.Second*3)
 	err1 := p.repo.UpdateMsg(dbCtx, msg.Key, field, dst)
-	cancel()
+	dbCancel()
 	if err1 != nil {
 		return fmt.Errorf("更新消息失败 %w, topic %s, key %s",
 			err1, msg.BizTopic, msg.Key)
