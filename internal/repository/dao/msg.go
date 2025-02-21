@@ -14,25 +14,29 @@ func NewMsgDAO(db *gorm.DB) *MsgDAO {
 	return &MsgDAO{db: db}
 }
 
-func (m *MsgDAO) CreateMsg(ctx context.Context, message DelayMsg) error {
+func (m *MsgDAO) CreateMsg(ctx context.Context, table string, message DelayMsg) error {
 	now := time.Now().UnixMilli()
 	message.Ctime = now
 	message.Utime = now
-	return m.db.WithContext(ctx).Create(&message).Error
+	return m.db.WithContext(ctx).Table(table).Create(&message).Error
 }
 
-func (m *MsgDAO) FindMsgs(ctx context.Context, offset, limit int) ([]DelayMsg, error) {
+func (m *MsgDAO) FindMsgs(ctx context.Context, table string, offset, limit int) ([]DelayMsg, error) {
 	now := time.Now().UnixMilli()
 	var res []DelayMsg
-	err := m.db.WithContext(ctx).Where("send_time <= ? AND status = ?", now, MsgStatusInit).
+	err := m.db.WithContext(ctx).Table(table).
+		Where("send_time <= ? AND status = ?", now, MsgStatusInit).
 		Offset(offset).Limit(limit).Find(&res).Error
 	return res, err
 }
 
-func (m *MsgDAO) UpdateMsg(ctx context.Context, key string, fields map[string]any) error {
-	return m.db.WithContext(ctx).Model(&DelayMsg{}).Where(DelayMsg{Key: key}).Updates(fields).Error
-}
-
-func (m *MsgDAO) InitTable() error {
-	return m.db.AutoMigrate(&DelayMsg{})
+func (m *MsgDAO) UpdateMsg(ctx context.Context, table string, key string, fields map[string]any) error {
+	res := m.db.WithContext(ctx).Table(table).Where(DelayMsg{Key: key}).Updates(fields)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }

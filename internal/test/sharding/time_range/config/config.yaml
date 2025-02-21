@@ -1,0 +1,16 @@
+datasource:
+  - db:
+    name: "kafka_ext"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext?charset=utf8mb4&parseTime=True&loc=Local"
+sharding:
+  bizStrategy:
+    # 用户需要指定自己要使用哪些策略，以及每个策略对应的 biz。
+    -
+      strategy: "time_range"
+      biz: ["bizA", "bizB"]
+  strategy:
+    time_range:
+      db: "kafka_ext"
+      tablePattern: "delay_msgs_tab_%d"
+      interval: "1" # 表间隔时间，单位为天
+      startTime: "2025-02-20" # 分库分表开始时间
