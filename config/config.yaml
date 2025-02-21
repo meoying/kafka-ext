@@ -13,7 +13,7 @@ sharding:
       strategy: "hash"
       biz: ["bizA", "bizB"]
     -
-      strategy: "range"
+      strategy: "time_range"
       biz: ["bizC", "bizD"]
   strategy:
     # 具体的策略配置，需要每个实现自己去解析配置
@@ -28,9 +28,11 @@ sharding:
         base: 2
         name: "delay_msgs_tab_%d"
         sharding: true
-    range:
-      # 未实现
-
+    time_range:
+      db: "kafka_ext"
+      tablePattern: "delay_msgs_tab_%d"
+      interval: "7" # 表间隔时间，单位为天
+      startTime: "2025-01-01" # 分库分表开始时间
 
 # 分布式锁
 lock:

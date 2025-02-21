@@ -1,10 +1,9 @@
-package not_sharding
+package time_range
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"github.com/IBM/sarama"
+	"github.com/benbjohnson/clock"
 	"github.com/meoying/kafka-ext/config"
 	consumer2 "github.com/meoying/kafka-ext/internal/consumer"
 	"github.com/meoying/kafka-ext/internal/msg"
@@ -19,18 +18,22 @@ import (
 	"github.com/stretchr/testify/suite"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
 
 const (
-	dbName    = "kafka_ext"
-	tableName = "delay_msgs"
+	db     = "kafka_ext"
+	table0 = "delay_msgs_tab_0"
+	table1 = "delay_msgs_tab_1"
+	table2 = "delay_msgs_tab_2"
 )
 
 type ConsumerTestSuite struct {
 	suite.Suite
-	db         *gorm.DB
+	dbs        map[string]*gorm.DB
 	producer   sarama.SyncProducer
 	dispatcher *sharding2.Dispatcher
 }
@@ -47,10 +50,11 @@ func initCfg(t *testing.T, c *config.Config) {
 	err = viper.UnmarshalKey("datasource", &c.DataSource)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(c.DataSource))
-	require.Equal(t, dbName, c.DataSource[0].Name)
+	require.Equal(t, db, c.DataSource[0].Name)
 
 	err = viper.UnmarshalKey("sharding", &c.Sharding)
 	require.NoError(t, err)
+
 }
 
 func (s *ConsumerTestSuite) SetupSuite() {
@@ -61,11 +65,11 @@ func (s *ConsumerTestSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 	s.dispatcher = dispatcher
 
-	db, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
+	// 初始化数据库
+	s.dbs = make(map[string]*gorm.DB)
+	db0, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
-	s.db = db
-	err = s.db.AutoMigrate(&dao.DelayMsg{})
-	require.NoError(s.T(), err)
+	s.dbs[db] = db0
 
 	cfg := sarama.NewConfig()
 	cfg.Producer.Return.Successes = true
@@ -73,20 +77,19 @@ func (s *ConsumerTestSuite) SetupSuite() {
 	cfg.Producer.Partitioner = sarama.NewRandomPartitioner
 	producer, err := sarama.NewSyncProducer([]string{"localhost:9094"}, cfg)
 	require.NoError(s.T(), err)
-
 	s.producer = producer
 }
 
 func (s *ConsumerTestSuite) TearDownTest() {
-	err := s.db.Exec("TRUNCATE TABLE delay_msgs").Error
+	err := s.dbs[db].Exec("TRUNCATE TABLE delay_msgs_tab_0").Error
+	require.NoError(s.T(), err)
+	err = s.dbs[db].Exec("TRUNCATE TABLE delay_msgs_tab_1").Error
+	require.NoError(s.T(), err)
+	err = s.dbs[db].Exec("TRUNCATE TABLE delay_msgs_tab_2").Error
 	require.NoError(s.T(), err)
 }
 
 func (s *ConsumerTestSuite) TestConsumer() {
-	dbs := map[string]*gorm.DB{
-		dbName: s.db,
-	}
-
 	cfg := sarama.NewConfig()
 	cfg.Consumer.Offsets.Initial = sarama.OffsetOldest
 	consumer, err := sarama.NewConsumerGroup([]string{"localhost:9094"},
@@ -94,7 +97,7 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	require.NoError(s.T(), err)
 	defer consumer.Close()
 
-	manager := dao.NewGormManager(dbs)
+	manager := dao.NewGormManager(s.dbs)
 	repo := repository.NewMsgRepository(s.dispatcher, manager)
 	svc := service.NewConsumerService(repo)
 	delayConsumer := consumer2.NewDelayConsumer(svc)
@@ -114,37 +117,54 @@ func (s *ConsumerTestSuite) TestConsumer() {
 
 	<-ctx.Done()
 
-	// 断言数据库中有数据
+	// 断言分片上有中有数据
 	ctx1, cancel1 := context.WithTimeout(context.Background(), time.Second*3)
 	defer cancel1()
 	var res []dao.DelayMsg
-	err = s.db.WithContext(ctx1).Find(&res).Error
+	err = s.dbs[db].Table(table0).WithContext(ctx1).Find(&res).Error
 	assert.NoError(s.T(), err)
-	assert.Equal(s.T(), 3, len(res))
+	assert.Equal(s.T(), 1, len(res))
+	assert.Equal(s.T(), "bizA", res[0].Biz)
+	assert.Equal(s.T(), "123", res[0].Key)
+	assert.True(s.T(), res[0].Utime > 0)
+
+	err = s.dbs[db].Table(table2).WithContext(ctx1).Find(&res).Error
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), 1, len(res))
+	assert.Equal(s.T(), "bizA", res[0].Biz)
+	assert.Equal(s.T(), "123", res[0].Key)
+	assert.True(s.T(), res[0].Utime > 0)
+
+	err = s.dbs[db].Table(table2).WithContext(ctx1).Find(&res).Error
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), 1, len(res))
+	assert.Equal(s.T(), "bizA", res[0].Biz)
+	assert.Equal(s.T(), "123", res[0].Key)
+	assert.True(s.T(), res[0].Utime > 0)
 }
 
 func produceMsg() []*sarama.ProducerMessage {
 	return []*sarama.ProducerMessage{
 		{
 			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(1)),
+			Value: sarama.StringEncoder(genMsg()),
 		},
 		{
 			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(2)),
+			Value: sarama.StringEncoder(genMsg()),
 		},
 		{
 			Topic: "test_topic",
-			Value: sarama.StringEncoder(genMsg(3)),
+			Value: sarama.StringEncoder(genMsg()),
 		},
 	}
 }
 
-func genMsg(seq int) string {
+func genMsg() string {
 	dMsg := msg.DelayMessage{
-		Key:      fmt.Sprintf("key-%d", seq),
+		Key:      "123",
 		Biz:      "bizA",
-		Content:  fmt.Sprintf("msg-content-%d", seq),
+		Content:  "msg-content",
 		BizTopic: "biz_topic",
 		SendTime: time.Now().Add(time.Second * 3).UnixMilli(),
 	}
@@ -152,12 +172,10 @@ func genMsg(seq int) string {
 }
 
 func initSharding(t *testing.T, c config.Config) (*sharding2.Dispatcher, error) {
-	if len(c.Sharding.BizStrategy) <= 0 {
-		return nil, fmt.Errorf("bizStrategy 配置为空")
-	}
+	require.True(t, len(c.Sharding.BizStrategy) > 0)
 
 	const (
-		StrategyHash = "hash"
+		StrategyTimeRange = "time_range"
 	)
 	// 每个 biz 使用的 strategy
 	bizStrategy := make(map[string]string)
@@ -166,57 +184,82 @@ func initSharding(t *testing.T, c config.Config) (*sharding2.Dispatcher, error) 
 	// 初始化所有用到的 strategy
 	for _, bs := range c.Sharding.BizStrategy {
 		switch bs.Strategy {
-		case StrategyHash:
-			hashCfg, ok := c.Sharding.Strategy[StrategyHash]
+		case StrategyTimeRange:
+			cfg, ok := c.Sharding.Strategy[StrategyTimeRange]
 			require.True(t, ok)
-			hash, err := initHashStrategy(t, hashCfg)
+
+			s, err := initTimeRangeStrategy(t, cfg)
 			require.NoError(t, err)
-			strategies[hash.Name()] = hash
+
+			mockTime := &MockTime{clock: clock.NewMock()}
+			s.Time = mockTime.Time
+
+			strategies[s.Name()] = s
 			for _, biz := range bs.Biz {
-				bizStrategy[biz] = hash.Name()
+				bizStrategy[biz] = s.Name()
 			}
 		default:
-			return nil, fmt.Errorf("未知的策略类型 %s", bs.Strategy)
 		}
 	}
 
 	require.True(t, len(strategies) == 1)
 	wantBizStrategy := map[string]string{
-		"bizA": "hash",
-		"bizB": "hash",
+		"bizA": "time_range",
+		"bizB": "time_range",
 	}
 	require.Equal(t, wantBizStrategy, bizStrategy)
 
 	return sharding2.NewDispatcher(bizStrategy, strategies), nil
 }
 
-func initHashStrategy(t *testing.T, hashCfg any) (strategy.Hash, error) {
-	const (
-		cfgDBdbPattern  = "dbpattern"
-		cfgTablePattern = "tablepattern"
-	)
-
-	cfg, ok := hashCfg.(map[string]any)
+func initTimeRangeStrategy(t *testing.T, config any) (strategy.TimeRange, error) {
+	cfg, ok := config.(map[string]any)
 	require.True(t, ok)
 
-	dbCfg, ok := cfg[cfgDBdbPattern]
+	db, ok := cfg["db"].(string)
 	require.True(t, ok)
-	var dbPattern strategy.HashPattern
-	data, _ := json.Marshal(&dbCfg)
-	err := json.Unmarshal(data, &dbPattern)
+
+	tablePattern, ok := cfg["tablepattern"].(string)
+	require.True(t, ok)
+
+	interval, ok := cfg["interval"].(string)
+	require.True(t, ok)
+
+	i, err := strconv.Atoi(interval)
 	require.NoError(t, err)
 
-	tableCfg, ok := cfg[cfgTablePattern]
+	startTime, ok := cfg["starttime"].(string)
 	require.True(t, ok)
-	var tablePattern strategy.HashPattern
-	data, _ = json.Marshal(&tableCfg)
-	err = json.Unmarshal(data, &tablePattern)
-	require.NoError(t, err)
-	// 断言配置信息
-	require.True(t, !dbPattern.Sharding)
-	require.True(t, !tablePattern.Sharding)
-	require.Equal(t, dbName, dbPattern.Name)
-	require.Equal(t, tableName, tablePattern.Name)
 
-	return strategy.NewHash(dbPattern, tablePattern), nil
+	const shortForm = "2006-01-02"
+	t1, err := time.Parse(shortForm, startTime)
+	require.NoError(t, err)
+
+	return strategy.NewTimeRange(db, tablePattern, t1, i), nil
+}
+
+type MockTime struct {
+	clock *clock.Mock
+	count int
+	mu    sync.Mutex
+}
+
+func (m *MockTime) Time() time.Time {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.count == 0 {
+		// 开始时间当天
+		m.clock.Set(time.Date(2025, 2, 20, 0, 0, 0, 0, time.UTC))
+		m.count++
+		return m.clock.Now()
+	}
+	if m.count == 1 {
+		// 开始时间的第二天
+		m.clock.Set(time.Date(2025, 2, 21, 0, 0, 0, 0, time.UTC))
+		m.count++
+		return m.clock.Now()
+	}
+	// 开始时间的第三天
+	m.clock.Set(time.Date(2025, 2, 22, 0, 0, 0, 0, time.UTC))
+	return m.clock.Now()
 }

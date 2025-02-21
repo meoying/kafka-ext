@@ -1,4 +1,4 @@
-package not_sharding
+package hash
 
 import (
 	"context"

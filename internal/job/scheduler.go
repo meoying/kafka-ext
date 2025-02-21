@@ -76,7 +76,7 @@ func (s *Scheduler) createTask(ctx context.Context, dst sharding2.DST) {
 }
 
 func (s *Scheduler) watch(ctx context.Context) {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(time.Second * 10)
 	defer ticker.Stop()
 	for {
 		select {

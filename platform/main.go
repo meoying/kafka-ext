@@ -20,6 +20,7 @@ import (
 	"gorm.io/gorm"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
@@ -164,7 +165,8 @@ func initSharding(c config.Config) (*sharding2.Dispatcher, error) {
 	}
 
 	const (
-		StrategyHash = "hash"
+		StrategyHash      = "hash"
+		StrategyTimeRange = "time_range"
 	)
 	// 每个 biz 使用的 strategy
 	bizStrategy := make(map[string]string)
@@ -187,9 +189,20 @@ func initSharding(c config.Config) (*sharding2.Dispatcher, error) {
 			for _, biz := range bs.Biz {
 				bizStrategy[biz] = s.Name()
 			}
-		case "range":
-			//TODO: implement me
-			panic("range 策略暂未实现")
+		case StrategyTimeRange:
+			cfg, ok := c.Sharding.Strategy[StrategyTimeRange]
+			if !ok || cfg == nil {
+				return nil, fmt.Errorf("分库分表策略 time_range 配置为空")
+			}
+			s, err := initTimeRangeStrategy(cfg)
+			if err != nil {
+				return nil, err
+			}
+
+			strategies[s.Name()] = s
+			for _, biz := range bs.Biz {
+				bizStrategy[biz] = s.Name()
+			}
 		default:
 			return nil, fmt.Errorf("未知的策略类型 %s", bs.Strategy)
 		}
@@ -197,13 +210,53 @@ func initSharding(c config.Config) (*sharding2.Dispatcher, error) {
 	return sharding2.NewDispatcher(bizStrategy, strategies), nil
 }
 
-func initHashStrategy(hashCfg any) (strategy.Hash, error) {
+func initTimeRangeStrategy(config any) (strategy.TimeRange, error) {
+	cfg, ok := config.(map[string]any)
+	if !ok {
+		return strategy.TimeRange{}, fmt.Errorf("time_range策略配置解析失败")
+	}
+
+	db, ok := cfg["db"].(string)
+	if !ok {
+		return strategy.TimeRange{}, fmt.Errorf("time_range db 解析失败")
+	}
+
+	tablePattern, ok := cfg["tablepattern"].(string)
+	if !ok {
+		return strategy.TimeRange{}, fmt.Errorf("time_range tablePattern 解析失败")
+	}
+
+	interval, ok := cfg["interval"].(string)
+	if !ok {
+		return strategy.TimeRange{}, fmt.Errorf("time_range interval 解析失败")
+	}
+
+	i, err := strconv.Atoi(interval)
+	if err != nil {
+		return strategy.TimeRange{}, fmt.Errorf("time_range interva 解析失败 %w", err)
+	}
+
+	startTime, ok := cfg["starttime"].(string)
+	if !ok {
+		return strategy.TimeRange{}, fmt.Errorf("time_range startTime 解析失败")
+	}
+
+	const shortForm = "2006-01-02"
+	t, err := time.Parse(shortForm, startTime)
+	if err != nil {
+		return strategy.TimeRange{}, fmt.Errorf("time_range startTime 解析失败 %w", err)
+	}
+
+	return strategy.NewTimeRange(db, tablePattern, t, i), nil
+}
+
+func initHashStrategy(config any) (strategy.Hash, error) {
 	const (
 		cfgDBdbPattern  = "dbpattern"
 		cfgTablePattern = "tablepattern"
 	)
 
-	cfg, ok := hashCfg.(map[string]any)
+	cfg, ok := config.(map[string]any)
 	if !ok {
 		return strategy.Hash{}, fmt.Errorf("hash 策略配置解析失败")
 	}
@@ -230,7 +283,7 @@ func initHashStrategy(hashCfg any) (strategy.Hash, error) {
 		return strategy.Hash{}, fmt.Errorf("hash tablePattern 配置解析失败")
 	}
 
-	return strategy.NewHashSharding(dbPattern, tablePattern), nil
+	return strategy.NewHash(dbPattern, tablePattern), nil
 }
 
 func initLockClient(c config.Config) (lock.Client, error) {

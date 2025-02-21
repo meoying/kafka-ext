@@ -4,8 +4,10 @@ go 1.23.1
 
 require (
 	github.com/IBM/sarama v1.45.0
+	github.com/benbjohnson/clock v1.3.5
 	github.com/ecodeclub/ekit v0.0.9-0.20250103132520-97490cde846c
 	github.com/google/uuid v1.6.0
+	github.com/pkg/errors v0.9.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	go.uber.org/mock v0.5.0

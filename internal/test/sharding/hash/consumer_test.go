@@ -1,4 +1,4 @@
-package not_sharding
+package hash
 
 import (
 	"context"
@@ -293,5 +293,5 @@ func initHashStrategy(t *testing.T, hashCfg any) (strategy.Hash, error) {
 	require.Equal(t, "kafka_ext_db_%d", dbPattern.Name)
 	require.Equal(t, "delay_msgs_tab_%d", tablePattern.Name)
 
-	return strategy.NewHashSharding(dbPattern, tablePattern), nil
+	return strategy.NewHash(dbPattern, tablePattern), nil
 }

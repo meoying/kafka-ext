@@ -63,6 +63,7 @@ func (p *DelayProducerJob) do(ctx context.Context) {
 			p.Logger.Info("任务取消，退出消息发送任务")
 			return
 		case err != nil:
+			p.Logger.Info("获取分布式锁失败", slog.Any("err", err))
 			time.Sleep(time.Second * 10)
 			continue
 		default:

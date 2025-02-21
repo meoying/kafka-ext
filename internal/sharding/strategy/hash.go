@@ -1,6 +1,7 @@
 package strategy
 
 import (
+	"errors"
 	"fmt"
 	"github.com/meoying/kafka-ext/internal/sharding"
 	"hash/fnv"
@@ -14,15 +15,18 @@ type Hash struct {
 	Hash func(key string, base int) int
 }
 
-func NewHashSharding(dbPattern, tablePattern HashPattern) Hash {
+func NewHash(dbPattern, tablePattern HashPattern) Hash {
 	return Hash{dbPattern: dbPattern, tablePattern: tablePattern, Hash: hash}
 }
 
 func (h Hash) Name() string {
-	return "hash"
+	return "range"
 }
 
-func (h Hash) Sharding(keys []string) sharding.DST {
+func (h Hash) Sharding(keys []string) (sharding.DST, error) {
+	if len(keys) < 2 {
+		return sharding.DST{}, errors.New("hash: 分片 key 错误")
+	}
 	dbKey := keys[0]
 	tableKey := keys[1]
 
@@ -45,7 +49,7 @@ func (h Hash) Sharding(keys []string) sharding.DST {
 	return sharding.DST{
 		DB:    dbName,
 		Table: tableName,
-	}
+	}, nil
 }
 
 func (h Hash) EffectiveTables() []sharding.DST {

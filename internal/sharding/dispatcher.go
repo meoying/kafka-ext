@@ -36,7 +36,7 @@ func (d *Dispatcher) Dispatch(msg msg2.DelayMessage) (DST, error) {
 	if err != nil {
 		return DST{}, err
 	}
-	return strategy.Sharding(keys), nil
+	return strategy.Sharding(keys)
 }
 
 func (d *Dispatcher) GetEffectiveTables() []DST {
@@ -52,7 +52,7 @@ func (d *Dispatcher) shardingKeys(name string, msg msg2.DelayMessage) ([]string,
 	case "hash":
 		// 默认使用 biz 和 bizID 作为分库分表字段
 		return []string{msg.Biz, msg.Key}, nil
-	case "range":
+	case "time_range":
 		// 默认使用时间作为分库分表字段
 		// 我只会把当前的时间戳传递进入，具体的处理逻辑，交给策略自己处理
 		return []string{time.Now().Format("20060102")}, nil

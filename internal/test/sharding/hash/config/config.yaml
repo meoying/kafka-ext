@@ -23,4 +23,4 @@ sharding:
         base: 2
         name: "delay_msgs_tab_%d"
         sharding: true
-    range:
+    time_range:
