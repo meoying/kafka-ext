@@ -174,7 +174,7 @@ func (s *ProducerTestSuite) TestProducer() {
 			tc.before()
 
 			producer := tc.mock(ctrl)
-			manager := dao.NewGormManager(s.dbs)
+			manager := dao.NewGormCreator(s.dbs)
 			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
 			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient)

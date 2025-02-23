@@ -61,7 +61,7 @@ func main() {
 		panic(err)
 	}
 
-	manager := dao2.NewGormManager(dbs)
+	manager := dao2.NewGormCreator(dbs)
 	repo := repository.NewMsgRepository(dispatcher, manager)
 
 	consumerSvc := service.NewConsumerService(repo)

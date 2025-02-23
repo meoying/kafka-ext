@@ -168,7 +168,7 @@ func (s *ProducerTestSuite) TestProducer() {
 			dbs := map[string]*gorm.DB{
 				dbName: s.db,
 			}
-			manager := dao.NewGormManager(dbs)
+			manager := dao.NewGormCreator(dbs)
 			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
 			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient)

@@ -92,7 +92,7 @@ func (s *ConsumerTestSuite) TestConsumer() {
 	require.NoError(s.T(), err)
 	defer consumer.Close()
 
-	manager := dao.NewGormManager(s.dbs)
+	manager := dao.NewGormCreator(s.dbs)
 	repo := repository.NewMsgRepository(s.dispatcher, manager)
 	svc := service.NewConsumerService(repo)
 	delayConsumer := consumer2.NewDelayConsumer(svc)

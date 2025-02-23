@@ -10,6 +10,8 @@ type MessageDAO interface {
 	UpdateMsg(ctx context.Context, table string, key string, fields map[string]any) error
 }
 
-type Manager interface {
-	CreateDAO(dbName string) (MessageDAO, error)
+// Creator MessageDAO creator
+type Creator interface {
+	// Create 返回一个 MessageDAO 的实例
+	Create(dbName string) (MessageDAO, error)
 }

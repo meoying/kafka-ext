@@ -11,16 +11,16 @@ import (
 
 type MsgRepository struct {
 	logger     *slog.Logger
-	daoManager dao2.Manager
+	daoCreator dao2.Creator
 	// 缓存 dao
 	daos       map[string]dao2.MessageDAO
 	dispatcher *sharding.Dispatcher
 }
 
-func NewMsgRepository(dispatcher *sharding.Dispatcher, manager dao2.Manager) *MsgRepository {
+func NewMsgRepository(dispatcher *sharding.Dispatcher, creator dao2.Creator) *MsgRepository {
 	return &MsgRepository{
 		dispatcher: dispatcher,
-		daoManager: manager,
+		daoCreator: creator,
 		daos:       make(map[string]dao2.MessageDAO),
 		logger:     slog.Default()}
 }
@@ -81,7 +81,7 @@ func (m *MsgRepository) UpdateMsg(ctx context.Context, key string, fields map[st
 func (m *MsgRepository) getDAO(db string) (dao2.MessageDAO, error) {
 	dao, ok := m.daos[db]
 	if !ok {
-		d, err := m.daoManager.CreateDAO(db)
+		d, err := m.daoCreator.Create(db)
 		if err != nil {
 			return nil, err
 		}

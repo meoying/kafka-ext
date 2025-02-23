@@ -195,7 +195,7 @@ func (s *ProducerTestSuite) TestProducer() {
 			defer ctrl.Finish()
 
 			producer := tc.mock(ctrl)
-			manager := dao.NewGormManager(s.dbs)
+			manager := dao.NewGormCreator(s.dbs)
 			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
 			// 这里必须通过 repo 存储消息到分片上，这样调度时才能获得所有分片
