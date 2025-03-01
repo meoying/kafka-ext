@@ -20,7 +20,7 @@ func NewHash(dbPattern, tablePattern HashPattern) Hash {
 }
 
 func (h Hash) Name() string {
-	return "range"
+	return "hash"
 }
 
 func (h Hash) Sharding(keys []string) (sharding.DST, error) {

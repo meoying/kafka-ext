@@ -54,7 +54,6 @@ func (d *Dispatcher) shardingKeys(name string, msg msg2.DelayMessage) ([]string,
 		return []string{msg.Biz, msg.Key}, nil
 	case "time_range":
 		// 默认使用时间作为分库分表字段
-		// 我只会把当前的时间戳传递进入，具体的处理逻辑，交给策略自己处理
 		return []string{time.Now().Format("20060102")}, nil
 	default:
 		return nil, errors.New("未知的分库分表策略")

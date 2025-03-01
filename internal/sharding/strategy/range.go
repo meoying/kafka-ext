@@ -1,10 +1,10 @@
 package strategy
 
 import (
+	"errors"
 	"fmt"
 	"github.com/ecodeclub/ekit/syncx/atomicx"
 	"github.com/meoying/kafka-ext/internal/sharding"
-	"github.com/pkg/errors"
 	"strconv"
 	"sync"
 )
@@ -23,9 +23,6 @@ type Range struct {
 }
 
 func NewRange(db string, tablePattern string, interval int) Range {
-	if interval <= 0 {
-		interval = 1
-	}
 	return Range{
 		db:           db,
 		tablePattern: tablePattern,
@@ -48,7 +45,9 @@ func (r Range) Sharding(keys []string) (sharding.DST, error) {
 	if err != nil {
 		return sharding.DST{}, fmt.Errorf("rang: 分片 key 类型转换错误 %w, key=%s", err, key)
 	}
-	// 初始化的时候已经确保了 interval 不会是 0
+	if r.interval <= 0 {
+		return sharding.DST{}, fmt.Errorf("range: 分片间隔必须大于 0，interval=%d", r.interval)
+	}
 	seq := int(num / int64(r.interval))
 	if seq > r.maxSeq.Load() {
 		r.mu.Lock()

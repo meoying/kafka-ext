@@ -192,7 +192,7 @@ func initSharding(t *testing.T, c config.Config) (*sharding2.Dispatcher, error) 
 			require.NoError(t, err)
 
 			mockTime := &MockTime{clock: clock.NewMock()}
-			s.Time = mockTime.Time
+			s.Now = mockTime.Time
 
 			strategies[s.Name()] = s
 			for _, biz := range bs.Biz {

@@ -13,14 +13,14 @@ type TimeRange struct {
 	startTime time.Time
 	// 返回当前时间。
 	// 为了测试弄的，不要修改
-	Time func() time.Time
+	Now func() time.Time
 }
 
 func NewTimeRange(db string, tablePattern string, startTime time.Time, interval int) TimeRange {
 	return TimeRange{
 		Range:     NewRange(db, tablePattern, interval),
 		startTime: startTime,
-		Time: func() time.Time {
+		Now: func() time.Time {
 			return time.Now()
 		},
 	}
@@ -32,8 +32,8 @@ func (t TimeRange) Name() string {
 
 func (t TimeRange) Sharding(keys []string) (sharding2.DST, error) {
 	// 距离开始时间过了多少天
-	cur := t.Time()
-	duration := cur.Sub(t.startTime)
+	now := t.Now()
+	duration := now.Sub(t.startTime)
 	if duration < 0 {
 		return sharding2.DST{}, errors.New("time_range: 时间错误，当前时间小于开始时间")
 	}
