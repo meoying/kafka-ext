@@ -19,14 +19,16 @@ type DelayProducerJob struct {
 	lockClient dlock.Client
 	BatchSize  int
 	dst        sharding.DST
+	scheduler  *Scheduler
 }
 
-func NewDelayProducerJob(svc *service.ProducerService, lockClient dlock.Client, dst sharding.DST) *DelayProducerJob {
+func NewDelayProducerJob(svc *service.ProducerService, lockClient dlock.Client, dst sharding.DST, scheduler *Scheduler) *DelayProducerJob {
 	return &DelayProducerJob{svc: svc,
 		Logger:     slog.Default(),
 		lockClient: lockClient,
 		BatchSize:  100,
 		dst:        dst,
+		scheduler:  scheduler,
 	}
 }
 
@@ -39,7 +41,7 @@ func (p *DelayProducerJob) do(ctx context.Context) {
 	p.Logger = p.Logger.With(slog.String("key", key))
 	interval := time.Minute
 	for {
-		if !p.tableExist(p.dst) {
+		if !p.shardingExist(p.dst) {
 			p.Logger.Info("检测到分片不存在，退出消息发送任务")
 			return
 		}
@@ -131,7 +133,6 @@ func (p *DelayProducerJob) refreshAndSendMsgs(ctx context.Context, lock dlock.Lo
 	}
 }
 
-func (p *DelayProducerJob) tableExist(dst sharding.DST) bool {
-	// TODO：检测分片是否存在
-	return true
+func (p *DelayProducerJob) shardingExist(dst sharding.DST) bool {
+	return p.scheduler.shardingExist(dst)
 }

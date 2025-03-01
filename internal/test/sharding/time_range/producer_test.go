@@ -201,7 +201,7 @@ func (s *ProducerTestSuite) TestProducer() {
 			// 这里必须通过 repo 存储消息到分片上，这样调度时才能获得所有分片
 			tc.before(repo)
 
-			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient)
+			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient, s.dbs)
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
 			scheduler.Start(ctx)

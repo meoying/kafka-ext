@@ -9,6 +9,7 @@ import (
 	"github.com/meoying/kafka-ext/internal/pkg/lock"
 	"github.com/meoying/kafka-ext/internal/service"
 	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
+	"gorm.io/gorm"
 	"log/slog"
 	"time"
 )
@@ -25,15 +26,21 @@ type Scheduler struct {
 	cancelFns map[string]context.CancelFunc
 	// 当前正在使用的分片
 	currentDsts atomicx.Value[[]sharding2.DST]
+	// watch interval
+	interval time.Duration
+	dbs      map[string]*gorm.DB
 }
 
-func NewScheduler(dispatcher *sharding2.Dispatcher, jobSvc *service.ProducerService, lockClient lock.Client) *Scheduler {
+func NewScheduler(dispatcher *sharding2.Dispatcher, jobSvc *service.ProducerService,
+	lockClient lock.Client, dbs map[string]*gorm.DB) *Scheduler {
 	return &Scheduler{
 		dispatcher: dispatcher,
 		jobSvc:     jobSvc,
 		lockClient: lockClient,
 		Logger:     slog.Default(),
 		cancelFns:  make(map[string]context.CancelFunc),
+		interval:   time.Minute,
+		dbs:        dbs,
 	}
 }
 
@@ -47,7 +54,7 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	dsts := s.dispatcher.GetEffectiveTables()
 	s.currentDsts.Store(dsts)
 	for _, dst := range dsts {
-		s.createTask(ctx, dst)
+		s.createTaskIfExist(ctx, dst)
 	}
 	// 接着，定期检查分片是否发生变化，如果发生变化，则为新的分片创建定时任务，并关闭不需要的定时任务。
 	// 一般来说，我们这里只有采用了范围分库分表时，才会出现分片变化的情况，
@@ -55,20 +62,26 @@ func (s *Scheduler) schedule(ctx context.Context) {
 	go s.watch(ctx)
 }
 
-func (s *Scheduler) tableExist(dst sharding2.DST) bool {
-	// TODO：检测分片是否存在
-	return true
+func (s *Scheduler) shardingExist(dst sharding2.DST) bool {
+	// 这种实现的缺陷是与 gorm 强耦合了
+	db, ok := s.dbs[dst.DB]
+	if !ok {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+	defer cancel()
+	return db.WithContext(ctx).Migrator().HasTable(dst.Table)
 }
 
-func (s *Scheduler) createTask(ctx context.Context, dst sharding2.DST) {
-	if !s.tableExist(dst) {
+func (s *Scheduler) createTaskIfExist(ctx context.Context, dst sharding2.DST) {
+	if !s.shardingExist(dst) {
 		return
 	}
 
 	key := s.key(dst)
 	s.Logger.Info("创建分片定时任务", slog.String("key", key))
 	// 每个分片都有一个自己的定时任务
-	task := NewDelayProducerJob(s.jobSvc, s.lockClient, dst)
+	task := NewDelayProducerJob(s.jobSvc, s.lockClient, dst, s)
 	taskCtx, cancel := context.WithCancel(ctx)
 	task.Run(taskCtx)
 
@@ -76,7 +89,7 @@ func (s *Scheduler) createTask(ctx context.Context, dst sharding2.DST) {
 }
 
 func (s *Scheduler) watch(ctx context.Context) {
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for {
 		select {
@@ -97,7 +110,7 @@ func (s *Scheduler) adjustTask(ctx context.Context) {
 	// cur 有的，latest 没有，就是已经停止使用的表，需要关闭它们的定时任务
 	newShadings := slice.DiffSet(latest, s.currentDsts.Load())
 	for _, dst := range newShadings {
-		s.createTask(ctx, dst)
+		s.createTaskIfExist(ctx, dst)
 	}
 
 	eliminations := slice.DiffSet(s.currentDsts.Load(), latest)

@@ -68,7 +68,7 @@ func main() {
 	producerSvc := service.NewProducerService(producer, repo)
 
 	delayConsumer := consumer2.NewDelayConsumer(consumerSvc)
-	scheduler := job2.NewScheduler(dispatcher, producerSvc, lockCli)
+	scheduler := job2.NewScheduler(dispatcher, producerSvc, lockCli, dbs)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

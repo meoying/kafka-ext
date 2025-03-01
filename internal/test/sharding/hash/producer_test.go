@@ -177,7 +177,7 @@ func (s *ProducerTestSuite) TestProducer() {
 			manager := dao.NewGormCreator(s.dbs)
 			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
-			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient)
+			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient, s.dbs)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*10)
 			defer cancel()
