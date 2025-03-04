@@ -1,0 +1,54 @@
+datasource:
+  - db:
+    name: "kafka_ext_db_0"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext_db_0?charset=utf8mb4&parseTime=True&loc=Local"
+  - db:
+    name: "kafka_ext_db_1"
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext_db_1?charset=utf8mb4&parseTime=True&loc=Local"
+
+sharding:
+  bizStrategy:
+    # 用户需要指定自己要使用哪些策略，以及每个策略对应的 biz。
+    -
+      strategy: "hash"
+      biz: ["bizA", "bizB"]
+    -
+      strategy: "time_range"
+      biz: ["bizC", "bizD"]
+  strategy:
+    # 具体的策略配置，需要每个实现自己去解析配置
+    hash:
+      # 通过 sharding 配置，细分为只分库不分表，只分表不分库，分库分表，不分库不分表
+      # 默认按照 biz 和 bizID 分库分表
+      dbPattern:
+        base: 2
+        name: "kafka_ext_db_%d"
+        sharding: true
+      tablePattern:
+        base: 2
+        name: "delay_msgs_tab_%d"
+        sharding: true
+    time_range:
+      db: "kafka_ext"
+      tablePattern: "delay_msgs_tab_%d"
+      interval: "7" # 表间隔时间，单位为天
+      startTime: "2025-01-01" # 分库分表开始时间
+
+# 分布式锁
+lock:
+  type: "gorm"
+  gorm:
+    dsn: "root:root@tcp(127.0.0.1:13316)/kafka_ext?charset=utf8mb4&parseTime=True&loc=Local"
+
+kafka:
+  addr: "localhost:9094"
+  groupID: "delay_consumer"
+  # 消费者的 topic
+  topic: "kafka_ext_delay_msg"
+
+
+
+     
+
+
+

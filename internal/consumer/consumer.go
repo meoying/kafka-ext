@@ -27,6 +27,7 @@ func (c *DelayConsumer) Setup(session sarama.ConsumerGroupSession) error {
 }
 
 func (c *DelayConsumer) Cleanup(session sarama.ConsumerGroupSession) error {
+	c.Logger.Info("退出消费者", slog.String("member_id", session.MemberID()))
 	return nil
 }
 
@@ -41,6 +42,7 @@ func (c *DelayConsumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim 
 	}
 	return nil
 }
+
 func (c *DelayConsumer) consume(msg *sarama.ConsumerMessage) error {
 	delayMsg, err := c.newMsg(msg)
 	if err != nil {

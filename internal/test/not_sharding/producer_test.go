@@ -1,16 +1,18 @@
-package producer
+package not_sharding
 
 import (
 	"context"
 	"errors"
 	"github.com/IBM/sarama"
+	"github.com/meoying/kafka-ext/config"
 	"github.com/meoying/kafka-ext/internal/job"
-	dlock "github.com/meoying/kafka-ext/internal/lock"
-	glock "github.com/meoying/kafka-ext/internal/lock/gorm"
 	"github.com/meoying/kafka-ext/internal/msg"
+	dlock "github.com/meoying/kafka-ext/internal/pkg/lock"
+	"github.com/meoying/kafka-ext/internal/pkg/lock/gorm"
 	"github.com/meoying/kafka-ext/internal/repository"
 	"github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
+	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
 	"github.com/meoying/kafka-ext/internal/test/mocks"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -26,6 +28,7 @@ type ProducerTestSuite struct {
 	suite.Suite
 	db         *gorm.DB
 	lockClient dlock.Client
+	dispatcher *sharding2.Dispatcher
 }
 
 func TestProducer(t *testing.T) {
@@ -33,7 +36,14 @@ func TestProducer(t *testing.T) {
 }
 
 func (s *ProducerTestSuite) SetupSuite() {
-	db, err := gorm.Open(mysql.Open("root:root@tcp(localhost:13316)/kafka_ext?charset=utf8mb4&collation=utf8mb4_general_ci&parseTime=True&loc=Local&timeout=1s&readTimeout=3s&writeTimeout=3s"))
+	var c config.Config
+	initCfg(s.T(), &c)
+
+	dispatcher, err := initSharding(s.T(), c)
+	require.NoError(s.T(), err)
+	s.dispatcher = dispatcher
+
+	db, err := gorm.Open(mysql.Open(c.DataSource[0].DSN))
 	require.NoError(s.T(), err)
 	s.db = db
 
@@ -155,14 +165,17 @@ func (s *ProducerTestSuite) TestProducer() {
 			tc.before()
 
 			producer := tc.mock(ctrl)
-			dbDAO := dao.NewMsgDAO(s.db)
-			repo := repository.NewMsgRepository(dbDAO)
+			dbs := map[string]*gorm.DB{
+				dbName: s.db,
+			}
+			manager := dao.NewGormCreator(dbs)
+			repo := repository.NewMsgRepository(s.dispatcher, manager)
 			svc := service.NewProducerService(producer, repo)
-			task := job.NewDelayProducerJob(svc, s.lockClient)
+			scheduler := job.NewScheduler(s.dispatcher, svc, s.lockClient, dbs)
 
 			ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
 			defer cancel()
-			task.Run(ctx)
+			scheduler.Start(ctx)
 			<-ctx.Done()
 
 			tc.after()
