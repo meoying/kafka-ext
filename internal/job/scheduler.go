@@ -6,7 +6,7 @@ import (
 	"github.com/ecodeclub/ekit/slice"
 	_ "github.com/ecodeclub/ekit/slice"
 	"github.com/ecodeclub/ekit/syncx/atomicx"
-	"github.com/meoying/kafka-ext/internal/pkg/lock"
+	"github.com/meoying/dlock-go"
 	"github.com/meoying/kafka-ext/internal/service"
 	sharding2 "github.com/meoying/kafka-ext/internal/sharding"
 	"gorm.io/gorm"
@@ -20,7 +20,7 @@ import (
 type Scheduler struct {
 	dispatcher *sharding2.Dispatcher
 	jobSvc     *service.ProducerService
-	lockClient lock.Client
+	lockClient dlock.Client
 	Logger     *slog.Logger
 
 	cancelFns map[string]context.CancelFunc
@@ -32,7 +32,7 @@ type Scheduler struct {
 }
 
 func NewScheduler(dispatcher *sharding2.Dispatcher, jobSvc *service.ProducerService,
-	lockClient lock.Client, dbs map[string]*gorm.DB) *Scheduler {
+	lockClient dlock.Client, dbs map[string]*gorm.DB) *Scheduler {
 	return &Scheduler{
 		dispatcher: dispatcher,
 		jobSvc:     jobSvc,
