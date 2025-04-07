@@ -4,8 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	dlock "github.com/meoying/kafka-ext/internal/pkg/lock"
-	"github.com/meoying/kafka-ext/internal/pkg/lock/errs"
+	"github.com/meoying/dlock-go"
 	"github.com/meoying/kafka-ext/internal/service"
 	"github.com/meoying/kafka-ext/internal/sharding"
 	"log/slog"
@@ -57,7 +56,7 @@ func (p *DelayProducerJob) do(ctx context.Context) {
 		cancel()
 
 		switch {
-		case errors.Is(err, errs.ErrLocked):
+		case errors.Is(err, dlock.ErrLocked):
 			p.Logger.Info("获取分布式锁失败，别人持有中")
 			time.Sleep(time.Second * 10)
 			continue

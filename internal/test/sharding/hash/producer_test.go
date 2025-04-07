@@ -4,11 +4,11 @@ import (
 	"context"
 	"errors"
 	"github.com/IBM/sarama"
+	"github.com/meoying/dlock-go"
+	glock "github.com/meoying/dlock-go/gorm"
 	"github.com/meoying/kafka-ext/config"
 	"github.com/meoying/kafka-ext/internal/job"
 	"github.com/meoying/kafka-ext/internal/msg"
-	dlock "github.com/meoying/kafka-ext/internal/pkg/lock"
-	"github.com/meoying/kafka-ext/internal/pkg/lock/gorm"
 	"github.com/meoying/kafka-ext/internal/repository"
 	"github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
@@ -75,7 +75,7 @@ func (s *ProducerTestSuite) SetupSuite() {
 	require.NoError(s.T(), err)
 	s.dbs[db_1] = db1
 
-	lockClient := glock.NewClient(s.dbs[db_0])
+	lockClient := glock.NewCASFirstClient(s.dbs[db_0])
 	err = lockClient.InitTable()
 	require.NoError(s.T(), err)
 	s.lockClient = lockClient

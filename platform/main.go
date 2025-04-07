@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/IBM/sarama"
+	"github.com/meoying/dlock-go"
+	glock "github.com/meoying/dlock-go/gorm"
 	"github.com/meoying/kafka-ext/config"
 	consumer2 "github.com/meoying/kafka-ext/internal/consumer"
 	job2 "github.com/meoying/kafka-ext/internal/job"
-	"github.com/meoying/kafka-ext/internal/pkg/lock"
-	"github.com/meoying/kafka-ext/internal/pkg/lock/gorm"
 	"github.com/meoying/kafka-ext/internal/repository"
 	dao2 "github.com/meoying/kafka-ext/internal/repository/dao"
 	"github.com/meoying/kafka-ext/internal/service"
@@ -286,14 +286,14 @@ func initHashStrategy(config any) (strategy.Hash, error) {
 	return strategy.NewHash(dbPattern, tablePattern), nil
 }
 
-func initLockClient(c config.Config) (lock.Client, error) {
+func initLockClient(c config.Config) (dlock.Client, error) {
 	switch c.Lock.Type {
 	case "gorm":
 		db, err := gorm.Open(mysql.Open(c.Lock.GORM.DSN))
 		if err != nil {
 			return nil, fmt.Errorf("初始化分布式锁的 db 失败 %w", err)
 		}
-		cli := glock.NewClient(db)
+		cli := glock.NewCASFirstClient(db)
 		err = cli.InitTable()
 		return cli, err
 	default:
